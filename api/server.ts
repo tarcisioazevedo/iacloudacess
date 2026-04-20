@@ -118,7 +118,26 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,  // Allow cross-origin images (S3/MinIO)
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
+// ─── P0 FIX: Intercept raw AutoRegister body before express.json destroys it! ───
+app.use('/cgi-bin/api/autoRegist/connect', (req, res, next) => {
+  let rawData = Buffer.alloc(0);
+  req.on('data', chunk => {
+    rawData = Buffer.concat([rawData, chunk]);
+  });
+  req.on('end', () => {
+    console.log('[AutoRegister STREAM] Raw bytes received:', rawData.length);
+    console.log('[AutoRegister STREAM] Raw content (utf8):', rawData.toString('utf8'));
+    console.log('[AutoRegister STREAM] Raw content (hex):', rawData.toString('hex'));
+    // Do not respond here, let it continue or wait...
+    // Actually, if we consume the stream here, downstream parsers will hang!
+    // We should buffer it and assign it to req.rawBody
+    (req as any).rawBody = rawData.toString('utf8');
+  });
+  // We MUST call next() immediately so it continues through the middleware chain,
+  // but since we attached stream listeners, it will capture data as it flows.
+  next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 

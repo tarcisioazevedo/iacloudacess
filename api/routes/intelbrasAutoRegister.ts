@@ -20,16 +20,17 @@ router.use(bodyParser.text({ type: '*/*' }));
 // POST /cgi-bin/api/autoRegist/connect
 // Intelbras devices on firmware 20251201+ post here to establish reverse TCP tunnel.
 router.post('/connect', (req: Request, res: Response, next) => {
-  console.log(`[AutoRegister] Incoming request raw body string:`, req.body);
+  console.log(`[AutoRegister] Incoming request raw body string:`, (req as any).rawBody || req.body);
   
   // Try to parse manually if it looks like JSON or Form
   let parsedBody: any = {};
-  if (typeof req.body === 'string') {
+  const bodyText = (req as any).rawBody || req.body;
+  if (typeof bodyText === 'string' && bodyText.length > 0) {
     try {
-      parsedBody = JSON.parse(req.body);
+      parsedBody = JSON.parse(bodyText);
     } catch {
       // Not JSON, maybe query string?
-      const params = new URLSearchParams(req.body);
+      const params = new URLSearchParams(bodyText);
       for (const [key, value] of params.entries()) {
         parsedBody[key] = value;
       }
