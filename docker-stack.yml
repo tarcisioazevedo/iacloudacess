@@ -20,16 +20,20 @@ services:
     command:
       - "--api.dashboard=true"
       - "--api.insecure=true"
-      # File provider: static routes defined in traefik-dynamic.yml (Docker Config)
-      # This bypasses the broken Docker socket in Docker Desktop Windows Swarm mode.
-      - "--providers.file.filename=/dynamic.yml"
+      # Native Swarm integration
+      - "--providers.swarm=true"
+      - "--providers.swarm.exposedbydefault=false"
+      - "--providers.swarm.network=school_public"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
-      # Uncomment for Let's Encrypt auto-SSL (on real Linux host):
-      # - "--certificatesresolvers.le.acme.httpchallenge=true"
-      # - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
-      # - "--certificatesresolvers.le.acme.email=${ACME_EMAIL:-admin@example.com}"
-      # - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.websecure.http.tls.certResolver=le"
+      # Auto-SSL with Let's Encrypt (Production VPS)
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.email=admin@iacloud.com.br"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
       - "--log.level=WARN"
       - "--accesslog=true"
       - "--accesslog.format=json"
@@ -39,9 +43,7 @@ services:
       - "443:443"
     volumes:
       - traefik_certs:/letsencrypt
-    configs:
-      - source: traefik-dynamic
-        target: /dynamic.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - public
     deploy:
@@ -53,6 +55,12 @@ services:
         limits:
           cpus: "0.50"
           memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.traefik-dash.rule=Host(`traefik.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.traefik-dash.service=api@internal"
+        - "traefik.http.routers.traefik-dash.entrypoints=websecure"
+        - "traefik.http.routers.traefik-dash.tls.certresolver=le"
 
   # ─── PostgreSQL ─────────────────────────────
   postgres:
