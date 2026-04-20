@@ -118,6 +118,8 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,  // Allow cross-origin images (S3/MinIO)
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
 // ─── P0 FIX: Intercept raw AutoRegister body before express.json destroys it! ───
 app.use('/cgi-bin/api/autoRegist/connect', (req, res, next) => {
   let rawData = Buffer.alloc(0);
