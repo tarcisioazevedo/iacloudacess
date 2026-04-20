@@ -36,6 +36,8 @@ import { apiRateLimiter, authRateLimiter, webhookRateLimiter } from './middlewar
 import { prisma } from './prisma';
 import intelbrasAutoRegisterRoutes from './routes/intelbrasAutoRegister';
 import internalAutoRegisterRoutes from './routes/internalAutoRegister';
+import { IntelbrasAutoRegisterService } from './services/intelbrasAutoRegisterService';
+import { resolveDeviceForAutoRegister } from './services/autoRegisterDeviceLookup';
 import diagnosticsRoutes from './routes/diagnostics';
 import auditTrailRoutes from './routes/auditTrail';
 import opsLogsRoutes from './routes/opsLogs';
@@ -56,7 +58,115 @@ const WEB_INDEX_PATH = path.join(WEB_DIST_PATH, 'index.html');
 const HAS_WEB_DIST = existsSync(WEB_INDEX_PATH);
 
 const app = express();
-const httpServer = createServer(app);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RAW HTTP HANDLER: Intercept AutoRegister tunnel requests BEFORE Express.
+// The Intelbras CGI AutoRegister protocol requires socket hijacking — the device
+// opens a POST, receives a 200 OK, then the roles reverse and the server sends
+// HTTP requests TO the device over the same TCP socket. Express's HTTP parser
+// interferes with this by trying to parse the device's responses as new HTTP
+// requests. By intercepting at the http.Server level, Express never touches
+// these connections.
+// ═══════════════════════════════════════════════════════════════════════════════
+const httpServer = createServer((req, res) => {
+  if (
+    req.method === 'POST' &&
+    req.url?.startsWith('/cgi-bin/api/autoRegist/connect')
+  ) {
+    handleAutoRegistRawConnection(req, res);
+    return;
+  }
+  // Everything else goes through Express normally
+  app(req, res);
+});
+
+/**
+ * Handle Intelbras CGI AutoRegister connection at the raw HTTP level.
+ * This runs OUTSIDE of Express — no middleware, no parser interference.
+ */
+function handleAutoRegistRawConnection(
+  req: import('http').IncomingMessage,
+  _res: import('http').ServerResponse,
+) {
+  const socket = req.socket;
+  const chunks: Buffer[] = [];
+
+  req.on('data', (chunk: Buffer) => chunks.push(chunk));
+  req.on('end', () => {
+    // Parse the device's JSON body
+    let body: any = {};
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch {
+      logger.warn('[AutoRegister] Failed to parse raw body as JSON');
+      socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const { DevClass, DeviceID, ServerIP } = body;
+    if (!DeviceID) {
+      logger.warn('[AutoRegister] Missing DeviceID in body');
+      socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    logger.info('[AutoRegister] Raw TCP connection intercepted before Express', {
+      deviceId: DeviceID,
+      devClass: DevClass,
+    });
+
+    // Detach socket from Node.js HTTP server internals
+    // After reading the body via req.on('data'/'end'), the HTTP parser has
+    // finished processing this request. We must prevent it from trying to
+    // parse the next "request" on this socket (which will actually be the
+    // device's response to our login command).
+    socket.removeAllListeners('timeout');
+    const parser = (socket as any).parser;
+    if (parser) {
+      // unconsume detaches the C++ parser from the socket's libuv handle
+      if (typeof parser.unconsume === 'function') parser.unconsume();
+      // close releases parser resources
+      if (typeof parser.close === 'function') parser.close();
+      (socket as any).parser = null;
+    }
+    if ((socket as any)._httpMessage) {
+      const httpMsg = (socket as any)._httpMessage;
+      if (typeof httpMsg.detachSocket === 'function') httpMsg.detachSocket(socket);
+      delete (socket as any)._httpMessage;
+    }
+    (socket as any)._server = null;
+
+    // Configure for long-lived tunnel
+    socket.setTimeout(0);
+    socket.setNoDelay(true);
+    socket.setKeepAlive(true, 10_000);
+    socket.resume();
+
+    // Look up device (supports truncated UUIDs from Intelbras firmware)
+    resolveDeviceForAutoRegister(DeviceID).then(({ resolvedId }) => {
+      const service = IntelbrasAutoRegisterService.getInstance();
+      service.handleNewConnection(
+        DeviceID,
+        DevClass || 'unknown',
+        ServerIP || req.socket.remoteAddress || '',
+        socket,
+        resolvedId || undefined,
+      ).catch((err) => {
+        logger.error('[AutoRegister] handleNewConnection failed', { error: err.message });
+        socket.destroy();
+      });
+    }).catch((err) => {
+      logger.error('[AutoRegister] Device lookup failed', { error: err.message, DeviceID });
+      socket.destroy();
+    });
+  });
+
+  req.on('error', () => {
+    socket.destroy();
+  });
+}
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -119,16 +229,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,  // Allow cross-origin images (S3/MinIO)
 }));
 
-// ─── P0 FIX: Intelbras sends JSON without Content-Type header ───
-// express.json() ignores bodies without Content-Type: application/json.
-// We inject the header for /cgi-bin paths so express.json() parses normally
-// WITHOUT consuming the stream (which would kill the socket for the reverse TCP tunnel).
-app.use('/cgi-bin', (req, _res, next) => {
-  if (!req.headers['content-type']) {
-    req.headers['content-type'] = 'application/json';
-  }
-  next();
-});
+// Content-Type injection for /cgi-bin is no longer needed since autoRegist
+// connections are now handled at the raw HTTP server level (before Express).
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
@@ -196,7 +298,9 @@ app.get('/api/ready', (_req, res) => {
   res.status(200).json({ ready: true });
 });
 
-app.use('/cgi-bin/api/autoRegist', intelbrasAutoRegisterRoutes);
+// AutoRegister routes are now handled at the raw HTTP server level (before Express)
+// to avoid the HTTP parser conflict with the reverse TCP tunnel protocol.
+// app.use('/cgi-bin/api/autoRegist', intelbrasAutoRegisterRoutes);
 
 if (IS_AUTOREG_GATEWAY) {
   app.use('/api/internal/autoreg', internalAutoRegisterRoutes);
