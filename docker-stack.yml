@@ -41,6 +41,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - DOCKER_API_VERSION=${DOCKER_API_VERSION:-1.44}
     volumes:
       - traefik_certs:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
