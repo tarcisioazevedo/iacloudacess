@@ -120,30 +120,17 @@ app.use(helmet({
 }));
 
 // ─── P0 FIX: Intelbras sends JSON without Content-Type header ───
-// express.json() ignores the body when Content-Type is missing.
-// For /cgi-bin paths, we manually collect the raw stream and parse it.
+// express.json() ignores bodies without Content-Type: application/json.
+// We inject the header for /cgi-bin paths so express.json() parses normally
+// WITHOUT consuming the stream (which would kill the socket for the reverse TCP tunnel).
 app.use('/cgi-bin', (req, _res, next) => {
-  const chunks: Buffer[] = [];
-  req.on('data', (chunk: Buffer) => chunks.push(chunk));
-  req.on('end', () => {
-    const raw = Buffer.concat(chunks).toString('utf8');
-    console.log('[AutoRegister] Raw body captured:', raw);
-    try {
-      req.body = JSON.parse(raw);
-    } catch {
-      req.body = {};
-      console.warn('[AutoRegister] Failed to parse body as JSON');
-    }
-    next();
-  });
-  req.on('error', () => next());
+  if (!req.headers['content-type']) {
+    req.headers['content-type'] = 'application/json';
+  }
+  next();
 });
 
-// For all other paths, use standard JSON parser
-app.use((req, res, next) => {
-  if (req.path.startsWith('/cgi-bin')) return next(); // already parsed above
-  express.json({ limit: '10mb' })(req, res, next);
-});
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 // ─── P0 FIX: Catch JSON parse errors on the Intelbras webhook path ───
