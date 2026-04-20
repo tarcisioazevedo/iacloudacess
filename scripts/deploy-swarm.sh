@@ -17,8 +17,10 @@ echo ""
 
 SECRET_DIR="${SECRET_DIR:-./secrets}"
 
+export DOCKER_BUILDKIT=1
+
 # ─── 1. Verify Swarm mode ─────────────────────
-if ! docker info --format '{{.Swarm.LocalNodeState}}' | grep -q "active"; then
+if ! docker info --format '{{.Swarm.LocalNodeState}}' | grep -wq "active"; then
   echo "⚠️  Docker Swarm not active. Initializing..."
   docker swarm init --advertise-addr $(hostname -I | awk '{print $1}') || true
 fi
