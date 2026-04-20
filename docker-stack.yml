@@ -372,7 +372,7 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.autoreg.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/cgi-bin/api/autoRegist`)"
+        - "traefik.http.routers.autoreg.rule=PathPrefix(`/cgi-bin/api/autoRegist`)"
         - "traefik.http.routers.autoreg.entrypoints=web,websecure"
         - "traefik.http.routers.autoreg.priority=50"
         - "traefik.http.services.autoreg.loadbalancer.server.port=4000"
