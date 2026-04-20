@@ -13,37 +13,73 @@ router.use(autoRegisterConnectionLimit);
 
 // POST /cgi-bin/api/autoRegist/connect
 // Intelbras CGI AutoRegister reverse tunnel protocol.
-// IMPORTANT: The device does NOT expect an HTTP response to this POST.
-// After sending the POST, it waits for the server to send commands (login, etc.)
-// directly over the same TCP socket. Sending an HTTP 200 will cause the device
-// to close the connection immediately.
+//
+// Protocol flow (from official Intelbras docs):
+//   1. Device → Server: POST /connect (body: {DevClass, DeviceID, ServerIP})
+//   2. Server → Device: HTTP/1.1 200 OK (acknowledge)
+//   3. Server → Device: POST /login (empty body, login challenge)
+//   4. Device → Server: HTTP 401 + WWW-Authenticate Digest
+//   5. Server → Device: POST /login + Authorization Digest
+//   6. Device → Server: HTTP 200 + Token
+//   7. Server → Device: POST /keep-alive (every 20s with X-cgi-token)
+//
+// CRITICAL: After step 2, the socket roles reverse — the server becomes the
+// HTTP client sending requests TO the device. Node.js HTTP server must be fully
+// detached from the socket before step 3, otherwise its parser will intercept
+// the device's 401 response (step 4), misinterpret it as a new HTTP request,
+// and close the socket.
 router.post('/connect', autoRegisterAllowlist, (req: Request, _res: Response) => {
   const { DevClass, DeviceID, ServerIP } = req.body;
   const resolvedDeviceId = (req as any).resolvedDeviceId as string | undefined;
   const socket = req.socket;
 
-  // ─── CRITICAL: Detach socket from Node.js HTTP server ───
-  // We must prevent the HTTP server from:
-  // 1. Sending any HTTP response (device doesn't expect one)
-  // 2. Parsing future data on this socket as HTTP requests
-  // 3. Applying timeouts
-  socket.removeAllListeners('timeout');
-  socket.removeAllListeners('data');   // Remove HTTP parser's data listener
-  socket.removeAllListeners('end');    // Remove HTTP parser's end listener
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 1: Fully detach socket from Node.js HTTP server BEFORE any writes.
+  // This ensures the HTTP parser won't intercept the device's future responses
+  // (401, 200+Token, keepalive ACKs) and misparse them as new HTTP requests.
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // Nullify HTTP server references to fully detach socket
-  if ((socket as any).parser) {
-    (socket as any).parser.close?.();
+  // Remove ALL event listeners the HTTP server attached to this socket
+  socket.removeAllListeners();
+
+  // Destroy the HTTP parser so it can't read from this socket anymore
+  const parser = (socket as any).parser;
+  if (parser) {
+    if (typeof parser.close === 'function') parser.close();
+    if (typeof parser.free === 'function') parser.free();
     (socket as any).parser = null;
   }
+
+  // Unlink socket from Express's response object
   if ((socket as any)._httpMessage) {
-    (socket as any)._httpMessage.detachSocket?.(socket);
+    const httpMsg = (socket as any)._httpMessage;
+    if (typeof httpMsg.detachSocket === 'function') {
+      httpMsg.detachSocket(socket);
+    }
     delete (socket as any)._httpMessage;
   }
+
+  // Remove server reference so HTTP server won't track this socket
   (socket as any)._server = null;
 
+  // Configure socket for long-lived tunnel
   socket.setTimeout(0);
+  socket.setNoDelay(true);
   socket.setKeepAlive(true, 10_000);
+
+  // Re-attach minimal error handling (removeAllListeners removed everything)
+  socket.on('error', (err) => {
+    console.error(`[AutoRegister] Socket error for ${DeviceID}:`, err.message);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 2: Hand off to the AutoRegister service.
+  // The service will:
+  //   a) Write HTTP 200 OK to socket (acknowledge connection per protocol docs)
+  //   b) Set up data/close/error listeners
+  //   c) Perform Digest login over the reverse tunnel
+  //   d) Start keep-alive interval
+  // ═══════════════════════════════════════════════════════════════════════════
 
   const authTimeout = setTimeout(() => {
     const service = IntelbrasAutoRegisterService.getInstance();
