@@ -39,19 +39,24 @@ router.post('/connect', autoRegisterAllowlist, (req: Request, _res: Response) =>
   // (401, 200+Token, keepalive ACKs) and misparse them as new HTTP requests.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Remove HTTP server listeners (but NOT internal stream mechanics)
-  // We must NOT call removeAllListeners() as it breaks the socket's read pipeline.
-  // We must NOT call parser.close() as it unregisters the libuv read handler.
-  // Instead, surgically remove only what the HTTP server added.
+  // Remove HTTP server listeners
   socket.removeAllListeners('timeout');
   socket.removeAllListeners('close');
   socket.removeAllListeners('error');
   socket.removeAllListeners('drain');
+  socket.removeAllListeners('data');
+  socket.removeAllListeners('end');
 
-  // Null out the HTTP parser reference so it won't process future data.
-  // IMPORTANT: Do NOT call parser.close() — it unregisters the native read handler
-  // and the socket can never receive data again.
-  if ((socket as any).parser) {
+  // Detach the C++ HTTP parser from the socket's native handle.
+  // parser.unconsume() is the CORRECT Node.js API for this:
+  // - It calls stream_ = nullptr at the C++ level (detaches from libuv handle)
+  // - It pushes any buffered data back to the stream
+  // - It does NOT destroy the socket's read mechanism (unlike parser.close())
+  const parser = (socket as any).parser;
+  if (parser) {
+    if (typeof parser.unconsume === 'function') {
+      parser.unconsume();
+    }
     (socket as any).parser = null;
   }
 
