@@ -113,7 +113,13 @@ if [ -n "$REGISTRY" ]; then
   docker push "${REGISTRY}school-access-frontend:${VERSION}"
 fi
 
-# ─── 6. Deploy stack ─────────────────────────
+# ─── 6. Create configs ─────────────────────────
+echo "⚙️  Creating Swarm configs..."
+if ! docker config inspect traefik-dynamic >/dev/null 2>&1; then
+  docker config create traefik-dynamic traefik-dynamic.yml || true
+fi
+
+# ─── 7. Deploy stack ─────────────────────────
 echo "🚀 Deploying stack '$STACK_NAME'..."
 DOMAIN="$DOMAIN" VERSION="$VERSION" REGISTRY="$REGISTRY" \
   docker stack deploy -c docker-stack.yml "$STACK_NAME"
