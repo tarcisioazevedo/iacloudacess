@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Plus, Search, GraduationCap, X, Upload, FileSpreadsheet, Camera, CheckCircle, AlertTriangle, Download } from 'lucide-react';
+import { Users, Plus, Search, GraduationCap, X, Upload, FileSpreadsheet, Camera, CheckCircle, AlertTriangle, Download, ChevronRight } from 'lucide-react';
+import StudentPanel from '../components/students/StudentPanel';
 
 interface Student {
   id: string; name: string; enrollment: string; grade: string; classGroup: string; shift: string; status: string;
@@ -278,6 +279,7 @@ export default function Students() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [photoTarget, setPhotoTarget] = useState<Student | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' });
   const [loading, setLoading] = useState(true);
 
@@ -375,14 +377,14 @@ export default function Students() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-              {['Aluno', 'Matrícula', 'Série', 'Turma', 'Turno', 'Foto', 'Sync', 'Ações'].map(h => (
-                <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+              {['Aluno', 'Matrícula', 'Série', 'Turma', 'Turno', 'Foto', 'Sync', 'Ações', ''].map((h, i) => (
+                <th key={i} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map(s => (
-              <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background 0.15s' }}
+              <tr key={s.id} onClick={() => setSelectedStudentId(s.id)} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background 0.15s', cursor: 'pointer' }}
                 onMouseOver={e => (e.currentTarget.style.background = 'var(--color-bg-subtle)')}
                 onMouseOut={e => (e.currentTarget.style.background = '')}>
                 <td style={{ padding: '12px 16px' }}>
@@ -422,11 +424,14 @@ export default function Students() {
                 </td>
                 <td style={{ padding: '12px 16px' }}>{syncBadge(s.deviceLinks)}</td>
                 <td style={{ padding: '12px 16px' }}>
-                  <button onClick={() => setPhotoTarget(s)} style={{
+                  <button onClick={(e) => { e.stopPropagation(); setPhotoTarget(s); }} style={{
                     padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'var(--color-primary-50)',
                     color: 'var(--color-primary-700)', border: '1px solid var(--color-primary-200)',
                     borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                   }}>📷 Foto</button>
+                </td>
+                <td style={{ padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+                  <ChevronRight size={16} />
                 </td>
               </tr>
             ))}
@@ -488,6 +493,16 @@ export default function Students() {
       {/* CSV Import Modal */}
       {showImport && token && (
         <CSVImportModal token={token} onClose={() => setShowImport(false)} onImported={load} />
+      )}
+
+      {/* Unified Student Dashboard Panel */}
+      {selectedStudentId && token && (
+        <StudentPanel 
+          studentId={selectedStudentId} 
+          token={token} 
+          onClose={() => setSelectedStudentId(null)} 
+          onUpdate={load} 
+        />
       )}
     </div>
   );

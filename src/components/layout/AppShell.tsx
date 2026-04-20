@@ -20,7 +20,6 @@ const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; path: st
   ],
   escola: [
     { label: 'Alunos', icon: <Users size={18} />, path: '/students', roles: ['school_admin', 'coordinator', 'integrator_admin', 'superadmin'] },
-    { label: 'Responsáveis', icon: <UserCheck size={18} />, path: '/guardians', roles: ['school_admin', 'coordinator', 'integrator_admin', 'superadmin'] },
     { label: 'Dispositivos', icon: <HardDrive size={18} />, path: '/devices', roles: ['school_admin', 'integrator_admin', 'integrator_support', 'superadmin'] },
     { label: 'Edges', icon: <Shield size={18} />, path: '/edges', roles: ['integrator_admin', 'integrator_support', 'superadmin'] },
     { label: 'WhatsApp Escolar', icon: <MessageSquare size={18} />, path: '/whatsapp', roles: ['school_admin', 'integrator_admin', 'integrator_support', 'superadmin'] },

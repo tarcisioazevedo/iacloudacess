@@ -9,7 +9,6 @@ const ProtectedAppLayout = lazy(() => import('./components/layout/ProtectedAppLa
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LiveFeed = lazy(() => import('./pages/LiveFeed'));
 const Students = lazy(() => import('./pages/Students'));
-const Guardians = lazy(() => import('./pages/Guardians'));
 const Devices = lazy(() => import('./pages/Devices'));
 const Edges = lazy(() => import('./pages/Edges'));
 const History = lazy(() => import('./pages/History'));
@@ -91,7 +90,6 @@ export default function App() {
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="live-feed" element={<LiveFeed />} />
                   <Route path="students" element={<Students />} />
-                  <Route path="guardians" element={<Guardians />} />
                   <Route path="devices" element={<Devices />} />
                   <Route
                     path="edges"
