@@ -75,10 +75,8 @@ echo "   [ok] PostgreSQL is accepting connections"
 # In Swarm, only one replica should run migrations.
 # Use MIGRATE_ON_START=true for the first replica.
 if [ "${MIGRATE_ON_START}" = "true" ]; then
-  echo "   Running database migrations..."
-  npx prisma migrate deploy
-  # Se não há arquivos de migration, migrate deploy retorna 0 mas não cria tabelas.
-  # prisma db push garante que o schema está em sincronia independentemente.
+  # Se há sujeira na pasta de migrations nativa, o migrate deploy quebra.
+  # Vamos garantir sincronização absoluta da base usando prisma db push
   echo "   Syncing schema with prisma db push..."
   npx prisma db push --accept-data-loss --skip-generate && \
     echo "   [ok] Schema synced" || \
