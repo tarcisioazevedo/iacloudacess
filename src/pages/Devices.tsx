@@ -76,6 +76,20 @@ export default function Devices() {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState<string | null>(null);
 
+  // Add Device Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [availableUnits, setAvailableUnits] = useState<{ id: string, name: string, schoolName: string }[]>([]);
+  const [addForm, setAddForm] = useState({
+    schoolUnitId: '',
+    name: '',
+    model: '',
+    ipAddress: '',
+    port: 80,
+    username: 'admin',
+    passwordEnc: '',
+    location: '',
+  });
+
   const load = () => {
     if (!token) {
       return;
@@ -86,6 +100,32 @@ export default function Devices() {
       .then((data) => setDevices(data.devices || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch schools and extract their units to populate the dropdown
+    fetch('/api/schools', { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => response.json())
+      .then((data) => {
+         // To get units without extra API calls, we rely on the fact that an Admin can query schools.
+         // However, /api/schools doesn't return full units array. We'll fetch the units for the first school.
+         // Better yet, since there is an endpoint `/api/schools/:id` let's just make it simple: 
+         // If there's at least one school, we fetch its details to get its units.
+         const schools = data.schools || [];
+         if (schools.length > 0) {
+           fetch(`/api/schools/${schools[0].id}`, { headers: { Authorization: `Bearer ${token}` } })
+             .then(r => r.json())
+             .then(sd => {
+               if (sd.school && sd.school.units) {
+                 setAvailableUnits(sd.school.units.map((u: any) => ({
+                   id: u.id,
+                   name: u.name,
+                   schoolName: sd.school.name
+                 })));
+                 setAddForm(prev => ({ ...prev, schoolUnitId: sd.school.units[0]?.id || '' }));
+               }
+             });
+         }
+      })
+      .catch(() => {});
   };
 
   useEffect(load, [token]);
@@ -147,6 +187,24 @@ export default function Devices() {
     setSyncing(null);
   };
 
+  const handleAddDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...addForm, isVirtual: false, connectionPolicy: 'auto' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Erro ao criar dispositivo');
+      setShowAddModal(false);
+      setAddForm({ ...addForm, name: '', ipAddress: '', passwordEnc: '', location: '' });
+      load();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao criar dispositivo');
+    }
+  };
+
   const statusColor = (status: string) => (
     status === 'online'
       ? 'var(--color-success)'
@@ -157,14 +215,85 @@ export default function Devices() {
 
   return (
     <div className="animate-fade-in-up">
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <HardDrive size={22} /> Dispositivos
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-          {devices.length} dispositivos cadastrados
-        </p>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <HardDrive size={22} /> Dispositivos
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+            {devices.length} dispositivos cadastrados
+          </p>
+        </div>
+        <button 
+          onClick={() => setShowAddModal(true)}
+          style={{ background: 'var(--color-primary-600)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <HardDrive size={16} /> Novo Dispositivo
+        </button>
       </div>
+
+      {showAddModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="animate-fade-in-up" style={{ background: 'var(--color-surface)', width: '100%', maxWidth: 500, borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Cadastrar Dispositivo de Acesso</h2>
+              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>✕</button>
+            </div>
+            <form onSubmit={handleAddDevice} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Unidade Escolar</label>
+                <select 
+                  required value={addForm.schoolUnitId} onChange={e => setAddForm({...addForm, schoolUnitId: e.target.value})}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                >
+                  <option value="" disabled>Selecione a Unidade</option>
+                  {availableUnits.map(u => (
+                    <option key={u.id} value={u.id}>{u.schoolName} - {u.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Nome de Identificação</label>
+                  <input required placeholder="Ex: Catraca Principal" value={addForm.name} onChange={e => setAddForm({...addForm, name: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Modelo do Equipamento</label>
+                  <input placeholder="Ex: Intelbras SS 3530" value={addForm.model} onChange={e => setAddForm({...addForm, model: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>IP na Rede Local</label>
+                  <input required placeholder="Ex: 192.168.1.200" value={addForm.ipAddress} onChange={e => setAddForm({...addForm, ipAddress: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'var(--font-mono)' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Porta HTTP</label>
+                  <input required type="number" value={addForm.port} onChange={e => setAddForm({...addForm, port: parseInt(e.target.value)})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontFamily: 'var(--font-mono)' }} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Usuário Intelbras</label>
+                  <input required value={addForm.username} onChange={e => setAddForm({...addForm, username: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Senha do Equipamento</label>
+                  <input type="password" placeholder="Em branco se for só AutoRegister" value={addForm.passwordEnc} onChange={e => setAddForm({...addForm, passwordEnc: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Localização do Hardware (Descritivo)</label>
+                <input placeholder="Ex: Portão da direita na entrada dos alunos" value={addForm.location} onChange={e => setAddForm({...addForm, location: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />
+              </div>
+              <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowAddModal(false)} style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', background: 'transparent', border: '1px solid var(--color-border)', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', background: 'var(--color-primary-600)', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Salvar Dispositivo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
         {devices.map((device) => {
