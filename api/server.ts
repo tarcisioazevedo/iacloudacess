@@ -83,12 +83,15 @@ const httpServer = createServer((req, res) => {
 /**
  * Handle Intelbras CGI AutoRegister connection at the raw HTTP level.
  * This runs OUTSIDE of Express — no middleware, no parser interference.
+ *
+ * Strategy: Complete the HTTP transaction properly using res.end(), then
+ * steal the underlying socket before Node.js HTTP server can reinitialize
+ * the parser for the next request.
  */
 function handleAutoRegistRawConnection(
   req: import('http').IncomingMessage,
-  _res: import('http').ServerResponse,
+  res: import('http').ServerResponse,
 ) {
-  const socket = req.socket;
   const chunks: Buffer[] = [];
 
   req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -99,16 +102,16 @@ function handleAutoRegistRawConnection(
       body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     } catch {
       logger.warn('[AutoRegister] Failed to parse raw body as JSON');
-      socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
-      socket.destroy();
+      res.writeHead(400);
+      res.end();
       return;
     }
 
     const { DevClass, DeviceID, ServerIP } = body;
     if (!DeviceID) {
       logger.warn('[AutoRegister] Missing DeviceID in body');
-      socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
-      socket.destroy();
+      res.writeHead(400);
+      res.end();
       return;
     }
 
@@ -117,34 +120,57 @@ function handleAutoRegistRawConnection(
       devClass: DevClass,
     });
 
-    // Detach socket from Node.js HTTP server internals
-    // After reading the body via req.on('data'/'end'), the HTTP parser has
-    // finished processing this request. We must prevent it from trying to
-    // parse the next "request" on this socket (which will actually be the
-    // device's response to our login command).
-    socket.removeAllListeners('timeout');
-    const parser = (socket as any).parser;
-    if (parser) {
-      // unconsume detaches the C++ parser from the socket's libuv handle
-      if (typeof parser.unconsume === 'function') parser.unconsume();
-      // close releases parser resources
-      if (typeof parser.close === 'function') parser.close();
+    // Get the underlying socket BEFORE sending the response.
+    // After res.end(), Node.js HTTP server will try to reclaim this socket
+    // for the next HTTP request. We must steal it first.
+    const socket = req.socket;
+
+    // Step 1: Send the HTTP 200 OK response that the Intelbras protocol requires.
+    // We send it via raw socket.write() to avoid triggering Node.js HTTP server's
+    // response completion handlers (which would try to reinitialize the parser).
+    // We deliberately do NOT use res.writeHead/res.end - that triggers the HTTP
+    // server's keepalive logic and parser reinitialization.
+    
+    // Step 2: Remove ALL listeners from the socket to fully detach from HTTP server.
+    // This must happen BEFORE writing anything, so the HTTP server's internal
+    // handlers don't fire during our write.
+    const existingListeners = {
+      data: socket.listeners('data').slice(),
+      end: socket.listeners('end').slice(),
+      close: socket.listeners('close').slice(),
+      error: socket.listeners('error').slice(),
+      drain: socket.listeners('drain').slice(),
+      timeout: socket.listeners('timeout').slice(),
+    };
+    
+    socket.removeAllListeners();
+
+    // Step 3: Configure for long-lived tunnel
+    socket.setTimeout(0);
+    socket.setNoDelay(true);
+    socket.setKeepAlive(true, 10_000);
+    
+    // Step 4: Set up our own minimal error handler
+    socket.on('error', (err) => {
+      logger.warn('[AutoRegister] Socket error after hijack', { error: err.message, DeviceID });
+    });
+
+    // Step 5: Null out HTTP server's references to this socket
+    if ((socket as any).parser) {
       (socket as any).parser = null;
     }
     if ((socket as any)._httpMessage) {
-      const httpMsg = (socket as any)._httpMessage;
-      if (typeof httpMsg.detachSocket === 'function') httpMsg.detachSocket(socket);
       delete (socket as any)._httpMessage;
     }
     (socket as any)._server = null;
 
-    // Configure for long-lived tunnel
-    socket.setTimeout(0);
-    socket.setNoDelay(true);
-    socket.setKeepAlive(true, 10_000);
+    // Step 6: Resume the socket so it can receive data again
+    // (removeAllListeners may have caused pausing)
     socket.resume();
 
-    // Look up device (supports truncated UUIDs from Intelbras firmware)
+    logger.info('[AutoRegister] Socket hijacked, handing to tunnel service', { DeviceID });
+
+    // Step 7: Look up device and hand off to tunnel service
     resolveDeviceForAutoRegister(DeviceID).then(({ resolvedId }) => {
       const service = IntelbrasAutoRegisterService.getInstance();
       service.handleNewConnection(
@@ -164,7 +190,7 @@ function handleAutoRegistRawConnection(
   });
 
   req.on('error', () => {
-    socket.destroy();
+    req.socket.destroy();
   });
 }
 
