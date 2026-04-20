@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Edge agent
+edge-agent/config.json
+edge-agent/state/
+
+# Docker secrets (never commit!)
+secrets/*.txt
+
+# Docker volumes
+pgdata/
+redisdata/

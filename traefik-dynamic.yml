@@ -1,0 +1,91 @@
+http:
+  routers:
+    # ── Frontend SPA ───────────────────────────
+    frontend-https:
+      rule: "Host(`localhost`)"
+      entryPoints: [websecure]
+      service: frontend-svc
+      priority: 1
+      tls: {}
+
+    frontend-http:
+      rule: "Host(`localhost`)"
+      entryPoints: [web]
+      middlewares: [redirect-https]
+      service: frontend-svc
+      priority: 1
+
+    # ── API ────────────────────────────────────
+    api-https:
+      rule: "Host(`localhost`) && PathPrefix(`/api`)"
+      entryPoints: [websecure]
+      service: api-svc
+      priority: 10
+      tls: {}
+
+    api-http:
+      rule: "Host(`localhost`) && PathPrefix(`/api`)"
+      entryPoints: [web]
+      middlewares: [redirect-https]
+      service: api-svc
+      priority: 10
+
+    # ── Socket.io (sticky sessions) ────────────
+    socketio-https:
+      rule: "Host(`localhost`) && PathPrefix(`/socket.io`)"
+      entryPoints: [websecure]
+      service: api-svc-sticky
+      priority: 10
+      tls: {}
+
+    socketio-http:
+      rule: "Host(`localhost`) && PathPrefix(`/socket.io`)"
+      entryPoints: [web]
+      middlewares: [redirect-https]
+      service: api-svc-sticky
+      priority: 10
+
+    # ── AutoReg Gateway ────────────────────────
+    autoreg-https:
+      rule: "PathPrefix(`/cgi-bin/api/autoRegist`)"
+      entryPoints: [websecure]
+      service: autoreg-svc
+      priority: 50
+      tls: {}
+
+    autoreg-http:
+      rule: "PathPrefix(`/cgi-bin/api/autoRegist`)"
+      entryPoints: [web]
+      service: autoreg-svc
+      priority: 50
+
+  middlewares:
+    redirect-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+  services:
+    frontend-svc:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
+
+    api-svc:
+      loadBalancer:
+        servers:
+          - url: "http://api:4000"
+
+    api-svc-sticky:
+      loadBalancer:
+        servers:
+          - url: "http://api:4000"
+        sticky:
+          cookie:
+            name: io_node
+            httpOnly: true
+
+    autoreg-svc:
+      loadBalancer:
+        servers:
+          - url: "http://autoreg-gateway:4000"

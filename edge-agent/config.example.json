@@ -1,0 +1,53 @@
+{
+  "cloud": {
+    "baseUrl": "http://localhost:4000",
+    "enrollmentToken": "edge_enroll_replace_me",
+    "heartbeatIntervalSec": 30,
+    "syncPollIntervalSec": 15,
+    "eventFlushIntervalSec": 10,
+    "maxSyncJobsPerPoll": 20,
+    "maxEventBatchSize": 50
+  },
+  "connector": {
+    "name": "edge-colegio-exemplo-sede",
+    "hostname": "edge-colegio-exemplo",
+    "version": "0.1.0",
+    "cloudMode": "outbound_only",
+    "adoptDevicesOnClaim": false,
+    "localSubnets": [
+      "192.168.0.0/24"
+    ],
+    "capabilities": {
+      "localWebhookIngest": true,
+      "syncPull": true,
+      "heartbeat": true
+    }
+  },
+  "localServer": {
+    "host": "0.0.0.0",
+    "port": 4500,
+    "intakeSecret": "replace-with-a-local-shared-secret"
+  },
+  "stateDir": "./state",
+  "devices": [
+    {
+      "vendor": "intelbras",
+      "name": "Facial Portao Principal",
+      "model": "SS 5532 MF W",
+      "cloudDeviceId": "replace-with-device-id",
+      "serialNumber": "optional-device-serial",
+      "localIdentifier": "portao-principal",
+      "ipAddress": "192.168.0.201",
+      "port": 80,
+      "username": "admin",
+      "password": "replace-local-device-password",
+      "transport": "hybrid",
+      "autoRegister": {
+        "enabled": true,
+        "deviceId": "portao-principal",
+        "keepAliveIntervalSec": 20
+      },
+      "enabled": true
+    }
+  ]
+}

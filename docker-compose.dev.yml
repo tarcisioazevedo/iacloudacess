@@ -1,0 +1,167 @@
+services:
+  traefik:
+    profiles:
+      - proxy
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: school-access-api:dev
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      REDIS_URL: redis://redis:6379
+      AUTOREG_INTERNAL_BASE_URL: http://autoreg-gateway:4000
+      AUTOREG_INTERNAL_TOKEN: dev-autoreg-internal-token
+      AUTOREG_PUBLIC_BASE_URL: http://localhost:4010
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:4000,http://localhost:5173
+      MIGRATE_ON_START: "true"
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  autoreg-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: school-access-api:dev
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      AUTOREG_GATEWAY_MODE: "true"
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      REDIS_URL: redis://redis:6379
+      AUTOREG_INTERNAL_TOKEN: dev-autoreg-internal-token
+      AUTOREG_PUBLIC_BASE_URL: http://localhost:4010
+    ports:
+      - "4010:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api-migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: school-access-api:dev
+    profiles:
+      - migrations
+    environment:
+      NODE_ENV: development
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      MIGRATE_ON_START: "true"
+      MIGRATION_ONLY: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: school-access-api:dev
+    profiles:
+      - workers
+    environment:
+      NODE_ENV: development
+      WORKER_MODE: "true"
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      REDIS_URL: redis://redis:6379
+      AUTOREG_INTERNAL_BASE_URL: http://autoreg-gateway:4000
+      AUTOREG_INTERNAL_TOKEN: dev-autoreg-internal-token
+      AUTOREG_PUBLIC_BASE_URL: http://localhost:4010
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      ENABLE_DIRECT_DEVICE_SYNC: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: school-access-frontend:dev
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_started
+
+  portainer:
+    profiles:
+      - ops
+
+  evolution-api:
+    profiles:
+      - automation
+    ports:
+      - "8080:8080"
+
+  n8n:
+    profiles:
+      - automation
+    ports:
+      - "5678:5678"
+
+networks:
+  public:
+    driver: bridge
+    name: school_public_dev
+
+  backend:
+    driver: bridge
+    name: school_backend_dev
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  jwt_refresh_secret:
+    file: ./secrets/jwt_refresh_secret.txt
+  minio_secret_key:
+    file: ./secrets/minio_secret_key.txt

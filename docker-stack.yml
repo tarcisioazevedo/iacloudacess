@@ -1,0 +1,641 @@
+# ═══════════════════════════════════════════════
+# School Access Platform — Docker Stack
+# Production stack for `docker stack deploy`
+#
+# Dev:  docker compose -f docker-stack.yml -f docker-compose.dev.yml up -d --build
+# Prod: docker stack deploy -c docker-stack.yml school
+# ═══════════════════════════════════════════════
+
+services:
+
+  # ─── Reverse Proxy (Traefik) ────────────────
+  # NOTE: Docker Desktop on Windows mounts /var/run/docker.sock as a read-only
+  # tmpfs inside Swarm containers, which prevents Go's Docker SDK (used by
+  # Traefik's docker/swarm providers) from connecting via Unix socket.
+  # Workaround: use the file provider with routes defined in traefik-dynamic.yml
+  # (mounted as a Docker Swarm config). When migrating to a real Linux host,
+  # remove --providers.file.filename and restore --providers.swarm + --providers.docker.
+  traefik:
+    image: traefik:v3.2
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      # File provider: static routes defined in traefik-dynamic.yml (Docker Config)
+      # This bypasses the broken Docker socket in Docker Desktop Windows Swarm mode.
+      - "--providers.file.filename=/dynamic.yml"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Uncomment for Let's Encrypt auto-SSL (on real Linux host):
+      # - "--certificatesresolvers.le.acme.httpchallenge=true"
+      # - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      # - "--certificatesresolvers.le.acme.email=${ACME_EMAIL:-admin@example.com}"
+      # - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=WARN"
+      - "--accesslog=true"
+      - "--accesslog.format=json"
+      - "--metrics.prometheus=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - traefik_certs:/letsencrypt
+    configs:
+      - source: traefik-dynamic
+        target: /dynamic.yml
+    networks:
+      - public
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+
+  # ─── PostgreSQL ─────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    # Tune for 512 MB RAM + PgBouncer in front (fewer but heavier connections).
+    # max_connections=50 is safe because PgBouncer caps server-side connections
+    # to DEFAULT_POOL_SIZE (20) — no app ever reaches Postgres directly except
+    # the migrator and 3rd-party services (evolution, n8n, ~5 conns each).
+    command: >
+      postgres
+      -c max_connections=50
+      -c shared_buffers=128MB
+      -c effective_cache_size=384MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c log_min_duration_statement=500
+    environment:
+      POSTGRES_DB: school_access
+      POSTGRES_USER: ${DB_USER:-schooladmin}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == true
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 10
+    healthcheck:
+      # Checar apenas se o servidor aceita conexões (não checar DB específico)
+      # O DB school_access é criado pelo POSTGRES_DB no primeiro init
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-schooladmin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    secrets:
+      - db_password
+
+  # ─── PgBouncer (Connection Pooler) ──────────
+  # Sits between the app replicas and PostgreSQL.
+  # Transaction pool mode: a Postgres server connection is held only for the
+  # duration of a single transaction, then returned to the pool.
+  # Result: 3 API + 2 worker replicas (25 PgBouncer client conns) are served
+  # by only ~20 actual Postgres connections instead of 25+, leaving plenty of
+  # headroom for evolution-api, n8n, and operational queries.
+  pgbouncer:
+    # edoburu/pgbouncer aceita DATABASE_URL diretamente — sem pgbouncer.ini manual
+    image: edoburu/pgbouncer:latest
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/school_access
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "20"
+      MIN_POOL_SIZE: "5"
+      RESERVE_POOL_SIZE: "5"
+      RESERVE_POOL_TIMEOUT: "3"
+      # Accept SCRAM-SHA-256 from clients (Prisma uses SCRAM by default with pg 16)
+      AUTH_TYPE: scram-sha-256
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits
+      SERVER_RESET_QUERY: ""
+      SERVER_IDLE_TIMEOUT: "600"
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == true
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+        reservations:
+          cpus: "0.05"
+          memory: 16M
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 10
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ─── Redis ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 128mb
+      --maxmemory-policy noeviction
+      --tcp-backlog 128
+    volumes:
+      - redisdata:/data
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == true
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 192M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+      restart_policy:
+        condition: any
+        delay: 3s
+        max_attempts: 10
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ─── MinIO (Object Storage) ─────────────────
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
+    volumes:
+      - miniodata:/data
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == true
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.minio-console.entrypoints=websecure"
+        - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+    secrets:
+      - minio_secret_key
+    healthcheck:
+      # mc ready local requer alias configurado; usar endpoint HTTP nativo do MinIO
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ─── API (Node.js + Express) ────────────────
+  api:
+    image: ${REGISTRY:-}school-access-api:${VERSION:-latest}
+    # Override Dockerfile HEALTHCHECK: use /api/ready (always 200, no DB check).
+    # The DB health is tracked via /api/health by Traefik — this healthcheck is
+    # only for Swarm liveness so the container doesn't get killed during DB hiccups.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/api/ready || exit 1"]
+      interval: 20s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      # Route through PgBouncer (transaction pool). The migrator and 3rd-party
+      # services (evolution-api, n8n) still talk directly to postgres:5432.
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      # Tells prisma.ts to append pgbouncer=true&statement_cache_size=0 to the
+      # connection URL (prepared statements are disabled in transaction mode).
+      PGBOUNCER_ENABLED: "true"
+      # Redis
+      REDIS_URL: redis://redis:6379
+      AUTOREG_INTERNAL_BASE_URL: http://autoreg-gateway:4000
+      AUTOREG_INTERNAL_TOKEN: ${AUTOREG_INTERNAL_TOKEN:-change-me-autoreg-internal-token}
+      AUTOREG_PUBLIC_BASE_URL: ${PUBLIC_PROTOCOL:-http}://${DOMAIN:-localhost}
+      # MinIO
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      # Socket.io Redis adapter (for multi-replica)
+      SOCKETIO_REDIS_URL: redis://redis:6379
+      # Misc
+      ALLOWED_ORIGINS: "http://${DOMAIN:-localhost},https://${DOMAIN:-localhost},https://www.${DOMAIN:-localhost}"
+      MIGRATE_ON_START: "false"
+    networks:
+      - public
+      - backend
+    deploy:
+      # 2 replicas sufficient for single-node dev; scale to 3+ in production.
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: stop-first
+        failure_action: continue
+        monitor: 60s
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 180s
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 384M
+        reservations:
+          cpus: "0.15"
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        # API routes
+        - "traefik.http.routers.api.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.api.entrypoints=web,websecure"
+        - "traefik.http.services.api.loadbalancer.server.port=4000"
+        - "traefik.http.services.api.loadbalancer.healthcheck.path=/api/health"
+        - "traefik.http.services.api.loadbalancer.healthcheck.interval=10s"
+        # Socket.io with sticky sessions (required for WebSocket)
+        - "traefik.http.routers.socketio.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/socket.io`)"
+        - "traefik.http.routers.socketio.entrypoints=web,websecure"
+        - "traefik.http.services.socketio.loadbalancer.server.port=4000"
+        - "traefik.http.services.socketio.loadbalancer.sticky.cookie=true"
+        - "traefik.http.services.socketio.loadbalancer.sticky.cookie.name=io_node"
+        - "traefik.http.services.socketio.loadbalancer.sticky.cookie.httpOnly=true"
+    secrets:
+      - db_password
+      - jwt_secret
+      - jwt_refresh_secret
+      - minio_secret_key
+
+  autoreg-gateway:
+    image: ${REGISTRY:-}school-access-api:${VERSION:-latest}
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      AUTOREG_GATEWAY_MODE: "true"
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      PGBOUNCER_ENABLED: "true"
+      REDIS_URL: redis://redis:6379
+      AUTOREG_INTERNAL_TOKEN: ${AUTOREG_INTERNAL_TOKEN:-change-me-autoreg-internal-token}
+      AUTOREG_PUBLIC_BASE_URL: ${PUBLIC_PROTOCOL:-http}://${DOMAIN:-localhost}
+      ALLOWED_ORIGINS: "http://${DOMAIN:-localhost},https://${DOMAIN:-localhost},https://www.${DOMAIN:-localhost}"
+    # Override Dockerfile HEALTHCHECK: use /api/ready (always 200, no DB check)
+    # The Intelbras autoreg gateway doesn't need DB health for its own liveness.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/api/ready || exit 1"]
+      interval: 20s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+    networks:
+      - public
+      - backend
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: stop-first
+        failure_action: continue
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.autoreg.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/cgi-bin/api/autoRegist`)"
+        - "traefik.http.routers.autoreg.entrypoints=web,websecure"
+        - "traefik.http.routers.autoreg.priority=50"
+        - "traefik.http.services.autoreg.loadbalancer.server.port=4000"
+        - "traefik.http.services.autoreg.loadbalancer.healthcheck.path=/api/health"
+        - "traefik.http.services.autoreg.loadbalancer.healthcheck.interval=10s"
+    secrets:
+      - db_password
+      - jwt_secret
+      - jwt_refresh_secret
+
+  # ─── API Migrator (one-shot, runs migrations) ─
+  api-migrator:
+    image: ${REGISTRY:-}school-access-api:${VERSION:-latest}
+    # Disable Dockerfile HEALTHCHECK: migrator never starts an HTTP server.
+    # It runs prisma migrate deploy then exits 0 — a health probe would
+    # always fail (no port 4000 listener) and kill the container prematurely.
+    healthcheck:
+      disable: true
+    environment:
+      NODE_ENV: production
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      MIGRATE_ON_START: "true"
+      MIGRATION_ONLY: "true"
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.role == manager
+    secrets:
+      - db_password
+      - jwt_secret
+      - jwt_refresh_secret
+
+  # ─── Worker (BullMQ Background Jobs) ────────
+  # NOTE: 1 replica is sufficient for single-node dev. Scale to 2 in production.
+  worker:
+    image: ${REGISTRY:-}school-access-api:${VERSION:-latest}
+    environment:
+      NODE_ENV: production
+      WORKER_MODE: "true"
+      ENABLE_DIRECT_DEVICE_SYNC: "true"
+      DB_USER: ${DB_USER:-schooladmin}
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_NAME: school_access
+      PGBOUNCER_ENABLED: "true"
+      REDIS_URL: redis://redis:6379
+      AUTOREG_INTERNAL_BASE_URL: http://autoreg-gateway:4000
+      AUTOREG_INTERNAL_TOKEN: ${AUTOREG_INTERNAL_TOKEN:-change-me-autoreg-internal-token}
+      AUTOREG_PUBLIC_BASE_URL: ${PUBLIC_PROTOCOL:-http}://${DOMAIN:-localhost}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+    # O worker é um processador de jobs BullMQ — não expõe HTTP de forma confiável.
+    # Checar Redis (dependência real do worker) em vez do endpoint HTTP da API.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z redis 6379 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    secrets:
+      - db_password
+      - jwt_secret
+      - jwt_refresh_secret
+      - minio_secret_key
+
+  # ─── Frontend (Nginx + React SPA) ───────────
+  frontend:
+    image: ${REGISTRY:-}school-access-frontend:${VERSION:-latest}
+    ports:
+      - "3000:80"
+    networks:
+      - public
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.frontend.entrypoints=web,websecure"
+        - "traefik.http.routers.frontend.priority=1"
+        - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+  # ─── Portainer (Cluster Management UI) ──────
+  portainer:
+    image: portainer/portainer-ce:latest
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainerdata:/data
+    networks:
+      - public
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.portainer.entrypoints=websecure"
+        - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  # ─── Evolution API (WhatsApp) ───────────────
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    environment:
+      - SERVER_URL=https://evolution.${DOMAIN:-localhost}
+      - CORS_ORIGIN=*
+      - CORS_METHODS=GET,POST,PUT,DELETE
+      - CORS_CREDENTIALS=true
+      - LOG_LEVEL=ERROR,WARN
+      - LOG_COLOR=false
+      - LOG_BAILEYS=error
+      - REDIS_ENABLED=true
+      - REDIS_URI=redis://redis:6379
+      - REDIS_PREFIX_KEY=evolution
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN:-global-secret-token}
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/evolution
+      # DATABASE_URL = alias para Prisma interno da Evolution API (v2 lê ambas as variáveis)
+      - DATABASE_URL=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/evolution
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    networks:
+      - backend
+      - public
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == true
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.evolution.rule=Host(`evolution.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.evolution.entrypoints=websecure"
+        - "traefik.http.services.evolution.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 20s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+
+  # ─── N8N (Visual Automation Engine) ───────────
+  n8n:
+    image: n8nio/n8n:latest
+    environment:
+      - N8N_HOST=n8n.${DOMAIN:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://n8n.${DOMAIN:-localhost}/
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      # Postgres DB Integration for n8n metadata/flows instead of SQLite for Swarm safety
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=n8n_data
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=${DB_USER:-schooladmin}
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - backend
+      - public
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == true
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.05"
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.n8n.rule=Host(`n8n.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.n8n.entrypoints=websecure"
+        - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+
+# ─── Networks ─────────────────────────────────
+networks:
+  public:
+    driver: overlay
+    attachable: true
+    name: school_public
+  backend:
+    driver: overlay
+    internal: true
+    name: school_backend
+
+# ─── Volumes ──────────────────────────────────
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  miniodata:
+    driver: local
+  traefik_certs:
+    driver: local
+  portainerdata:
+    driver: local
+  evolution_instances:
+    driver: local
+  evolution_store:
+    driver: local
+  n8n_data:
+    driver: local
+
+# ─── Configs (Swarm-managed, plain text) ──────
+# Create with: docker config create traefik-dynamic traefik-dynamic.yml
+# On re-deploy after changing routes: create new version, update docker-stack.yml
+configs:
+  traefik-dynamic:
+    external: true
+
+# ─── Secrets (Swarm-managed, encrypted) ───────
+secrets:
+  db_password:
+    external: true
+  jwt_secret:
+    external: true
+  jwt_refresh_secret:
+    external: true
+  minio_secret_key:
+    external: true

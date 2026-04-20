@@ -1,0 +1,17 @@
+{$DOMAIN:localhost} {
+    handle /n8n/* {
+        reverse_proxy n8n:5678
+    }
+    handle /api/* {
+        reverse_proxy api:4000
+    }
+    handle /cgi-bin/api/autoRegist/* {
+        reverse_proxy autoreg-gateway:4000
+    }
+    handle /socket.io/* {
+        reverse_proxy api:4000
+    }
+    handle {
+        reverse_proxy frontend:80
+    }
+}

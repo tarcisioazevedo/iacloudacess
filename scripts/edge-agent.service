@@ -1,0 +1,15 @@
+[Unit]
+Description=IA Cloud Edge Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/school-access-platform
+ExecStart=/usr/bin/env bash -lc 'cd /opt/school-access-platform && ./node_modules/.bin/tsx edge-agent/main.ts run --config edge-agent/config.json'
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
