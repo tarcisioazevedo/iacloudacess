@@ -83,7 +83,7 @@ if [ "${MIGRATE_ON_START}" = "true" ]; then
     echo "   [warn] db push failed (may already be in sync)"
   echo "   [ok] Migrations complete"
   echo "   Running database seeds (admin user injection)..."
-  npx prisma db seed && \
+  node node_modules/tsx/dist/cli.mjs prisma/seed.ts && \
     echo "   [ok] Database seeded successfully" || \
     echo "   [warn] Database seed failed or already seeded"
 fi
