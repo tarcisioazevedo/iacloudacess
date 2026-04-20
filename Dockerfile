@@ -38,6 +38,7 @@ RUN apk add --no-cache tini curl
 COPY --from=deps /app/node_modules_prod ./node_modules
 COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
 
 # Copy app code  
 COPY package.json tsconfig.json ./

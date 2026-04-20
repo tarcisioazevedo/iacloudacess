@@ -76,14 +76,18 @@ echo "   [ok] PostgreSQL is accepting connections"
 # Use MIGRATE_ON_START=true for the first replica.
 if [ "${MIGRATE_ON_START}" = "true" ]; then
   echo "   Running database migrations..."
-  npx prisma migrate deploy 2>/dev/null
+  npx prisma migrate deploy
   # Se não há arquivos de migration, migrate deploy retorna 0 mas não cria tabelas.
   # prisma db push garante que o schema está em sincronia independentemente.
   echo "   Syncing schema with prisma db push..."
-  npx prisma db push --accept-data-loss --skip-generate 2>/dev/null && \
+  npx prisma db push --accept-data-loss --skip-generate && \
     echo "   [ok] Schema synced" || \
     echo "   [warn] db push failed (may already be in sync)"
   echo "   [ok] Migrations complete"
+  echo "   Running database seeds (admin user injection)..."
+  npx prisma db seed && \
+    echo "   [ok] Database seeded successfully" || \
+    echo "   [warn] Database seed failed or already seeded"
 fi
 
 if [ "${MIGRATION_ONLY}" = "true" ]; then
