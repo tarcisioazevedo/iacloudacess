@@ -138,6 +138,18 @@ app.use('/api/intelbras', (err: any, req: express.Request, res: express.Response
   next(err);
 });
 
+app.use('/cgi-bin', (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.parse.failed') {
+    logger.warn('[AutoRegister] JSON parse failed on cgi-bin. Returning 400 manually.', {
+      path: req.path,
+      contentType: req.headers['content-type'],
+      rawBodyPreview: typeof err.body === 'string' ? err.body.slice(0, 500) : '',
+    });
+    return res.status(400).json({ error: 'invalid json payload sent by device', raw: err.body });
+  }
+  next(err);
+});
+
 app.use((req, res, next) => {
   const requestId = req.headers['x-request-id'] as string || crypto.randomUUID();
   req.headers['x-request-id'] = requestId;
