@@ -39,14 +39,19 @@ router.post('/connect', autoRegisterAllowlist, (req: Request, _res: Response) =>
   // (401, 200+Token, keepalive ACKs) and misparse them as new HTTP requests.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Remove ALL event listeners the HTTP server attached to this socket
-  socket.removeAllListeners();
+  // Remove HTTP server listeners (but NOT internal stream mechanics)
+  // We must NOT call removeAllListeners() as it breaks the socket's read pipeline.
+  // We must NOT call parser.close() as it unregisters the libuv read handler.
+  // Instead, surgically remove only what the HTTP server added.
+  socket.removeAllListeners('timeout');
+  socket.removeAllListeners('close');
+  socket.removeAllListeners('error');
+  socket.removeAllListeners('drain');
 
-  // Destroy the HTTP parser so it can't read from this socket anymore
-  const parser = (socket as any).parser;
-  if (parser) {
-    if (typeof parser.close === 'function') parser.close();
-    if (typeof parser.free === 'function') parser.free();
+  // Null out the HTTP parser reference so it won't process future data.
+  // IMPORTANT: Do NOT call parser.close() — it unregisters the native read handler
+  // and the socket can never receive data again.
+  if ((socket as any).parser) {
     (socket as any).parser = null;
   }
 
@@ -67,7 +72,10 @@ router.post('/connect', autoRegisterAllowlist, (req: Request, _res: Response) =>
   socket.setNoDelay(true);
   socket.setKeepAlive(true, 10_000);
 
-  // Re-attach minimal error handling (removeAllListeners removed everything)
+  // Force socket into flowing mode so data events fire for new listeners
+  socket.resume();
+
+  // Re-attach minimal error handling
   socket.on('error', (err) => {
     console.error(`[AutoRegister] Socket error for ${DeviceID}:`, err.message);
   });
