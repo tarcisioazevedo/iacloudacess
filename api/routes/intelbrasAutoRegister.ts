@@ -13,15 +13,32 @@ const router = Router();
 router.use(autoRegisterRateLimit);
 router.use(autoRegisterConnectionLimit);
 
-// Force parsing of JSON even if Content-Type is missing or weird
-router.use(express.json({ type: '*/*' }));
-router.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Force parse raw body string to see what the 203 bytes actually contain!
+import bodyParser from 'body-parser';
+router.use(bodyParser.text({ type: '*/*' }));
 
 // POST /cgi-bin/api/autoRegist/connect
 // Intelbras devices on firmware 20251201+ post here to establish reverse TCP tunnel.
 router.post('/connect', (req: Request, res: Response, next) => {
-  console.log(`[AutoRegister] Incoming request headers:`, req.headers);
-  console.log(`[AutoRegister] Incoming request raw body:`, req.body);
+  console.log(`[AutoRegister] Incoming request raw body string:`, req.body);
+  
+  // Try to parse manually if it looks like JSON or Form
+  let parsedBody: any = {};
+  if (typeof req.body === 'string') {
+    try {
+      parsedBody = JSON.parse(req.body);
+    } catch {
+      // Not JSON, maybe query string?
+      const params = new URLSearchParams(req.body);
+      for (const [key, value] of params.entries()) {
+        parsedBody[key] = value;
+      }
+    }
+  } else if (typeof req.body === 'object') {
+    parsedBody = req.body;
+  }
+  
+  req.body = parsedBody;
   next();
 }, autoRegisterAllowlist, (req: Request, _res: Response) => {
   const { DevClass, DeviceID, ServerIP } = req.body;
