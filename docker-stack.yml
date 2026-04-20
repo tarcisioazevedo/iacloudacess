@@ -89,6 +89,10 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     volumes:
       - pgdata:/var/lib/postgresql/data
+    configs:
+      - source: postgres_init
+        target: /docker-entrypoint-initdb.d/init-multiple-dbs.sh
+        mode: 0555
     networks:
       - backend
     deploy:
@@ -636,6 +640,8 @@ volumes:
 configs:
   traefik-dynamic:
     external: true
+  postgres_init:
+    file: ./scripts/postgres-init.sh
 
 # ─── Secrets (Swarm-managed, encrypted) ───────
 secrets:
