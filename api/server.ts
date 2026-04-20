@@ -117,30 +117,33 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,  // Allow cross-origin images (S3/MinIO)
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
-// ─── P0 FIX: Intercept raw AutoRegister body before express.json destroys it! ───
-app.use('/cgi-bin/api/autoRegist/connect', (req, res, next) => {
-  let rawData = Buffer.alloc(0);
-  req.on('data', chunk => {
-    rawData = Buffer.concat([rawData, chunk]);
-  });
+// ─── P0 FIX: Intelbras sends JSON without Content-Type header ───
+// express.json() ignores the body when Content-Type is missing.
+// For /cgi-bin paths, we manually collect the raw stream and parse it.
+app.use('/cgi-bin', (req, _res, next) => {
+  const chunks: Buffer[] = [];
+  req.on('data', (chunk: Buffer) => chunks.push(chunk));
   req.on('end', () => {
-    console.log('[AutoRegister STREAM] Raw bytes received:', rawData.length);
-    console.log('[AutoRegister STREAM] Raw content (utf8):', rawData.toString('utf8'));
-    console.log('[AutoRegister STREAM] Raw content (hex):', rawData.toString('hex'));
-    // Do not respond here, let it continue or wait...
-    // Actually, if we consume the stream here, downstream parsers will hang!
-    // We should buffer it and assign it to req.rawBody
-    (req as any).rawBody = rawData.toString('utf8');
+    const raw = Buffer.concat(chunks).toString('utf8');
+    console.log('[AutoRegister] Raw body captured:', raw);
+    try {
+      req.body = JSON.parse(raw);
+    } catch {
+      req.body = {};
+      console.warn('[AutoRegister] Failed to parse body as JSON');
+    }
+    next();
   });
-  // We MUST call next() immediately so it continues through the middleware chain,
-  // but since we attached stream listeners, it will capture data as it flows.
-  next();
+  req.on('error', () => next());
 });
 
-app.use(express.json({ limit: '10mb' }));
+// For all other paths, use standard JSON parser
+app.use((req, res, next) => {
+  if (req.path.startsWith('/cgi-bin')) return next(); // already parsed above
+  express.json({ limit: '10mb' })(req, res, next);
+});
 app.use(cookieParser());
 
 // ─── P0 FIX: Catch JSON parse errors on the Intelbras webhook path ───
