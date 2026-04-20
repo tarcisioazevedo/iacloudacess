@@ -595,12 +595,10 @@ services:
 # ─── Networks ─────────────────────────────────
 networks:
   public:
-    driver: overlay
-    attachable: true
+    external: true
     name: school_public
   backend:
-    driver: overlay
-    internal: true
+    external: true
     name: school_backend
 
 # ─── Volumes ──────────────────────────────────
