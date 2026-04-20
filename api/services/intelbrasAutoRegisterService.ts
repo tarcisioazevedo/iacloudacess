@@ -106,8 +106,8 @@ export class IntelbrasAutoRegisterService {
       return;
     }
 
-    // Acknowledge the connection immediately to device
-    socket.write('HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 0\r\n\r\n');
+    // HTTP 200 response is already sent by the route handler via Express's res object
+    // before the socket is detached and passed here.
 
     if (this.activeConnections.has(deviceId)) {
       const old = this.activeConnections.get(deviceId)!;
