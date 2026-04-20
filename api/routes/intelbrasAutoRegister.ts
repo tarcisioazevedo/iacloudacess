@@ -6,14 +6,24 @@ import {
   autoRegisterAllowlist,
 } from '../middleware/autoRegisterSecurity';
 
+import express from 'express';
+
 const router = Router();
 
 router.use(autoRegisterRateLimit);
 router.use(autoRegisterConnectionLimit);
 
+// Force parsing of JSON even if Content-Type is missing or weird
+router.use(express.json({ type: '*/*' }));
+router.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 // POST /cgi-bin/api/autoRegist/connect
 // Intelbras devices on firmware 20251201+ post here to establish reverse TCP tunnel.
-router.post('/connect', autoRegisterAllowlist, (req: Request, _res: Response) => {
+router.post('/connect', (req: Request, res: Response, next) => {
+  console.log(`[AutoRegister] Incoming request headers:`, req.headers);
+  console.log(`[AutoRegister] Incoming request raw body:`, req.body);
+  next();
+}, autoRegisterAllowlist, (req: Request, _res: Response) => {
   const { DevClass, DeviceID, ServerIP } = req.body;
   const resolvedDeviceId = (req as any).resolvedDeviceId as string | undefined;
   const socket = req.socket;
