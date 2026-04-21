@@ -117,12 +117,12 @@ function QrCountdown({ lastQrAt }: { lastQrAt: string | null }) {
   );
 }
 
-export default function SchoolWhatsApp({ isHubMode = false }: { isHubMode?: boolean }) {
+export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isHubMode?: boolean; hubSchoolId?: string | null }) {
   const { token, profile, isDemo } = useAuth();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [schools, setSchools] = useState<SchoolOption[]>([]);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string>('');
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>(hubSchoolId || '');
   const [loadingSchools, setLoadingSchools] = useState(true);
   const [loadingChannel, setLoadingChannel] = useState(false);
   const [working, setWorking] = useState(false);
@@ -143,6 +143,14 @@ export default function SchoolWhatsApp({ isHubMode = false }: { isHubMode?: bool
   useEffect(() => {
     if (lockedToOwnSchool) {
       setSelectedSchoolId(profile?.schoolId || '');
+      setLoadingSchools(false);
+      return;
+    }
+
+    if (hubSchoolId) {
+      if (selectedSchoolId !== hubSchoolId) {
+        setSelectedSchoolId(hubSchoolId);
+      }
       setLoadingSchools(false);
       return;
     }
@@ -180,11 +188,11 @@ export default function SchoolWhatsApp({ isHubMode = false }: { isHubMode?: bool
     };
 
     loadSchools();
-  }, [isDemo, lockedToOwnSchool, profile?.schoolId, searchParams, token, toast]);
+  }, [isDemo, lockedToOwnSchool, profile?.schoolId, searchParams, token, toast, hubSchoolId]);
 
   useEffect(() => {
     if (!resolvedSchoolId) return;
-    if (!lockedToOwnSchool) {
+    if (!lockedToOwnSchool && !isHubMode) {
       setSearchParams({ schoolId: resolvedSchoolId });
     }
 
@@ -430,7 +438,7 @@ export default function SchoolWhatsApp({ isHubMode = false }: { isHubMode?: bool
           )}
         </div>
 
-        {!lockedToOwnSchool && (
+        {(!lockedToOwnSchool && !isHubMode) && (
           <div style={{ minWidth: 280 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--color-text-secondary)' }}>
               Escola
