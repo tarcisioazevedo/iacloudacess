@@ -13,7 +13,7 @@ router.get('/', async (req: Request, res: Response) => {
     const schools = await prisma.school.findMany({
       where: filter,
       include: {
-        integrator: { select: { name: true, slug: true } },
+        integrator: { select: { id: true, name: true, slug: true } },
         _count: {
           select: {
             students: { where: { status: 'active' } },
@@ -38,6 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
         id: school.id,
         name: school.name,
         slug: school.slug,
+        integratorId: school.integrator.id,
         integratorName: school.integrator.name,
         status: school.status,
         totalStudents: school._count.students,

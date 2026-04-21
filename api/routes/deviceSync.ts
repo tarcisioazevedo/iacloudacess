@@ -5,6 +5,7 @@ import { deviceTenantWhere } from '../middleware/tenant';
 import { deviceSyncQueue } from '../services/deviceSyncQueue';
 import { getDeviceClient } from '../services/deviceClientFactory';
 import { resolveDeviceTransport } from '../services/deviceTransport';
+import { checkDeviceOperationStatus } from '../services/deviceBusinessRules';
 
 const router = Router();
 router.use(requireAuth);
@@ -34,6 +35,11 @@ async function loadAuthorizedDevice(req: Request, deviceId: string) {
 router.post('/:deviceId/sync-all', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
   try {
     const { deviceId } = req.params;
+
+    const operationStatus = await checkDeviceOperationStatus(deviceId);
+    if (!operationStatus.ok) {
+      return res.status(403).json({ message: operationStatus.reason });
+    }
 
     const device = await loadAuthorizedDevice(req, deviceId);
     if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
@@ -145,6 +151,12 @@ router.get('/:deviceId/status', async (req: Request, res: Response) => {
 router.post('/:deviceId/auto-link', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
   try {
     const { deviceId } = req.params;
+
+    const operationStatus = await checkDeviceOperationStatus(deviceId);
+    if (!operationStatus.ok) {
+      return res.status(403).json({ message: operationStatus.reason });
+    }
+
     const device = await prisma.device.findFirst({
       where: { id: deviceId, ...deviceTenantWhere(req.user) },
       include: { schoolUnit: true, studentLinks: { select: { studentId: true } } },

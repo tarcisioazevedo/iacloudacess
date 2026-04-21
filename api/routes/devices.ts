@@ -90,12 +90,47 @@ function pickEdgeConnectorId(
 // GET /api/devices — filtered by tenant
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const { schoolId, integratorId } = req.query;
+    
+    // Base tenant filters
+    const baseWhere = deviceTenantWhere(req.user);
+    
+    // Explicit query filters
+    const queryWhere: any = {};
+    if (typeof schoolId === 'string' && schoolId.trim()) {
+      queryWhere.schoolUnit = { ...queryWhere.schoolUnit, schoolId: schoolId.trim() };
+    }
+    if (typeof integratorId === 'string' && integratorId.trim()) {
+      queryWhere.schoolUnit = queryWhere.schoolUnit || {};
+      queryWhere.schoolUnit.school = { integratorId: integratorId.trim() };
+    }
+
     const devices = await prisma.device.findMany({
-      where: deviceTenantWhere(req.user),
+      where: {
+        AND: [baseWhere, queryWhere]
+      },
       include: {
         schoolUnit: {
           include: {
-            school: { select: { name: true } },
+            school: { 
+              select: { 
+                id: true, 
+                name: true, 
+                status: true, 
+                billingStatus: true,
+                integrator: {
+                  select: {
+                    id: true,
+                    status: true,
+                    licenses: {
+                      where: { status: 'active' },
+                      orderBy: { validTo: 'desc' },
+                      take: 1
+                    }
+                  }
+                }
+              } 
+            },
             edgeConnectors: {
               select: { id: true, name: true, status: true, lastSeenAt: true },
               orderBy: { createdAt: 'desc' },
@@ -109,7 +144,28 @@ router.get('/', async (req: Request, res: Response) => {
       },
       orderBy: { name: 'asc' },
     });
-    return res.json({ devices: devices.map(sanitizeDevice) });
+
+    const mappedDevices = devices.map(d => {
+      const sanitized = sanitizeDevice(d);
+      
+      const school = d.schoolUnit?.school;
+      const integrator = school?.integrator;
+      const license = integrator?.licenses?.[0];
+      
+      const isSchoolBlocked = school?.billingStatus === 'blocked' || school?.status !== 'active';
+      const isIntegratorBlocked = integrator?.status !== 'active' || integrator?.status === 'blocked' || (!license) || new Date(license.validTo) < new Date();
+      
+      return {
+        ...sanitized,
+        operationStatus: {
+          ok: !isSchoolBlocked && !isIntegratorBlocked,
+          isSchoolBlocked,
+          isIntegratorBlocked
+        }
+      };
+    });
+
+    return res.json({ devices: mappedDevices });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }

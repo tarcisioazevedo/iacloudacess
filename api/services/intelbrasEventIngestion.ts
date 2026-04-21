@@ -880,6 +880,9 @@ export async function ingestIntelbrasWebhook(params: {
     return;
   }
 
+  const { checkDeviceOperationStatus } = await import('./deviceBusinessRules');
+  const operationStatus = await checkDeviceOperationStatus(device.id);
+
   const normalizedEvents = normalizeIntelbrasEvents(device.id, params.parsed);
   if (!normalizedEvents.length) {
     await writeIntelbrasOpsLog(device, {
@@ -906,6 +909,11 @@ export async function ingestIntelbrasWebhook(params: {
   const photoCache = new Map<string, string | null>();
 
   for (const normalized of normalizedEvents) {
+    if (!operationStatus.ok) {
+      normalized.shouldBroadcast = false;
+      normalized.shouldNotify = false;
+    }
+
     if (normalized.eventCode !== 'AccessControl') {
       await writeIntelbrasOpsLog(device, {
         level: 'info',

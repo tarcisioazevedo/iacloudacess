@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users } from 'lucide-react';
+import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users, Building2, GraduationCap, Filter, X } from 'lucide-react';
 
 interface EdgeConnectorSummary {
   id: string;
@@ -57,6 +57,11 @@ interface DeviceData {
     edgeConnectors?: EdgeConnectorSummary[];
   };
   _count: { studentLinks: number; syncJobs: number };
+  operationStatus?: {
+    ok: boolean;
+    isSchoolBlocked: boolean;
+    isIntegratorBlocked: boolean;
+  };
 }
 
 const CONNECTION_POLICY_OPTIONS: Array<{
@@ -70,11 +75,18 @@ const CONNECTION_POLICY_OPTIONS: Array<{
 ];
 
 export default function Devices() {
-  const { token } = useAuth();
+  const { token, user, profile } = useAuth() as any;
   const [devices, setDevices] = useState<DeviceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState<string | null>(null);
+
+  // Filters State
+  const [filterSchoolId, setFilterSchoolId] = useState<string>('');
+  const [filterIntegratorId, setFilterIntegratorId] = useState<string>('');
+  const [schools, setSchools] = useState<any[]>([]);
+  const [integrators, setIntegrators] = useState<any[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
 
   // Add Device Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -90,28 +102,33 @@ export default function Devices() {
     location: '',
   });
 
+  const isSuperadmin = profile?.role === 'superadmin';
+
   const load = () => {
     if (!token) {
       return;
     }
 
-    fetch('/api/devices', { headers: { Authorization: `Bearer ${token}` } })
+    setLoading(true);
+    let qs = new URLSearchParams();
+    if (filterSchoolId) qs.append('schoolId', filterSchoolId);
+    if (filterIntegratorId) qs.append('integratorId', filterIntegratorId);
+    
+    const queryString = qs.toString() ? `?${qs.toString()}` : '';
+
+    fetch(`/api/devices${queryString}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((response) => response.json())
       .then((data) => setDevices(data.devices || []))
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    // Fetch schools and extract their units to populate the dropdown
     fetch('/api/schools', { headers: { Authorization: `Bearer ${token}` } })
       .then((response) => response.json())
       .then((data) => {
-         // To get units without extra API calls, we rely on the fact that an Admin can query schools.
-         // However, /api/schools doesn't return full units array. We'll fetch the units for the first school.
-         // Better yet, since there is an endpoint `/api/schools/:id` let's just make it simple: 
-         // If there's at least one school, we fetch its details to get its units.
-         const schools = data.schools || [];
-         if (schools.length > 0) {
-           fetch(`/api/schools/${schools[0].id}`, { headers: { Authorization: `Bearer ${token}` } })
+         const fetchedSchools = data.schools || [];
+         setSchools(fetchedSchools);
+         if (fetchedSchools.length > 0) {
+           fetch(`/api/schools/${fetchedSchools[0].id}`, { headers: { Authorization: `Bearer ${token}` } })
              .then(r => r.json())
              .then(sd => {
                if (sd.school && sd.school.units) {
@@ -126,9 +143,21 @@ export default function Devices() {
          }
       })
       .catch(() => {});
+
+    // For Superadmin, fetch integrators
+    if (isSuperadmin) {
+      fetch('/api/integrators', { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => res.json())
+        .then(data => {
+          setIntegrators(data.integrators || []);
+        })
+        .catch(() => {});
+    }
   };
 
-  useEffect(load, [token]);
+  useEffect(() => {
+    load();
+  }, [token, filterSchoolId, filterIntegratorId, isSuperadmin]);
 
   const saveDeviceRouting = async (
     deviceId: string,
@@ -213,9 +242,20 @@ export default function Devices() {
         : 'var(--color-danger)'
   );
 
+  const displayedSchools = filterIntegratorId 
+    ? schools.filter(s => s.integratorId === filterIntegratorId) 
+    : schools;
+
+  const handleClearFilters = () => {
+    setFilterIntegratorId('');
+    setFilterSchoolId('');
+  };
+
+  const activeFiltersCount = (filterIntegratorId ? 1 : 0) + (filterSchoolId ? 1 : 0);
+
   return (
     <div className="animate-fade-in-up">
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: isFilterOpen ? 16 : 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
             <HardDrive size={22} /> Dispositivos
@@ -224,13 +264,148 @@ export default function Devices() {
             {devices.length} dispositivos cadastrados
           </p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          style={{ background: 'var(--color-primary-600)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-        >
-          <HardDrive size={16} /> Novo Dispositivo
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button 
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            style={{ 
+              background: isFilterOpen ? 'var(--color-primary-50)' : 'var(--color-surface)', 
+              color: isFilterOpen ? 'var(--color-primary-700)' : 'var(--color-text-primary)', 
+              border: `1px solid ${isFilterOpen ? 'var(--color-primary-200)' : 'var(--color-border)'}`, 
+              padding: '9px 14px', 
+              borderRadius: 'var(--radius-md)', 
+              fontWeight: 600, 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 8,
+              transition: 'all 0.2s'
+            }}
+          >
+            <Filter size={16} /> 
+            Filtros
+            {activeFiltersCount > 0 && (
+              <span style={{ background: 'var(--color-primary-600)', color: 'white', fontSize: 11, padding: '2px 6px', borderRadius: 10 }}>
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            style={{ background: 'var(--color-primary-600)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <HardDrive size={16} /> Novo Dispositivo
+          </button>
+        </div>
       </div>
+
+      {isFilterOpen && (
+        <div 
+          className="animate-fade-in-up" 
+          style={{ 
+            marginBottom: 24, 
+            padding: 16, 
+            background: 'rgba(255, 255, 255, 0.4)', 
+            backdropFilter: 'blur(12px)',
+            border: '1px solid var(--color-border)', 
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 16,
+            flexWrap: 'wrap'
+          }}
+        >
+          {isSuperadmin && (
+            <div style={{ flex: '1 1 200px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+                <Building2 size={13} /> Integrador
+              </label>
+              <select
+                value={filterIntegratorId}
+                onChange={(e) => {
+                  setFilterIntegratorId(e.target.value);
+                  setFilterSchoolId(''); // Reset school when integrator changes
+                }}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  fontSize: 13,
+                  outline: 'none',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  transition: 'border-color 0.2s',
+                  appearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px top 50%',
+                  backgroundSize: '10px auto'
+                }}
+              >
+                <option value="">Todos os integradores</option>
+                {integrators.map(intg => (
+                  <option key={intg.id} value={intg.id}>{intg.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ flex: '1 1 200px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+              <GraduationCap size={13} /> Escola (Filial)
+            </label>
+            <select
+              value={filterSchoolId}
+              onChange={(e) => setFilterSchoolId(e.target.value)}
+              disabled={isSuperadmin && !filterIntegratorId && schools.length > 50} // Disable if too many and no drill-down
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                fontSize: 13,
+                outline: 'none',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                transition: 'border-color 0.2s',
+                appearance: 'none',
+                backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 12px top 50%',
+                backgroundSize: '10px auto',
+                opacity: (isSuperadmin && !filterIntegratorId && schools.length > 50) ? 0.5 : 1
+              }}
+            >
+              <option value="">Todas as escolas</option>
+              {displayedSchools.map(school => (
+                <option key={school.id} value={school.id}>{school.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {(filterIntegratorId || filterSchoolId) && (
+            <button
+              onClick={handleClearFilters}
+              style={{
+                background: 'transparent',
+                color: 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                padding: '9px 12px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                height: 'fit-content'
+              }}
+            >
+              <X size={14} /> Limpar
+            </button>
+          )}
+        </div>
+      )}
 
       {showAddModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -329,10 +504,11 @@ export default function Devices() {
               style={{
                 background: 'var(--color-surface)',
                 borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--color-border)',
+                border: device.operationStatus?.ok === false ? '2px solid var(--color-danger)' : '1px solid var(--color-border)',
                 padding: 22,
                 position: 'relative',
                 overflow: 'hidden',
+                opacity: device.operationStatus?.ok === false ? 0.75 : 1,
               }}
             >
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: statusColor(device.status) }} />
@@ -340,7 +516,14 @@ export default function Devices() {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 3 }}>{device.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{device.model || 'Sem modelo'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {device.model || 'Sem modelo'}
+                    {device.operationStatus?.ok === false && (
+                      <span className="badge badge-danger" style={{ marginLeft: 6, fontWeight: 'bold' }}>
+                        {device.operationStatus.isSchoolBlocked ? 'Escola Inadimplente' : 'Licença do Integrador Expirada'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {device.status === 'online'
