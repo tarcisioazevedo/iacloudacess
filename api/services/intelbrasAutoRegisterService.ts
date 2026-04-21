@@ -7,6 +7,7 @@ import {
   autoRegisterPresenceService,
   type AutoRegisterSessionPresence,
 } from './autoRegisterPresenceService';
+import { writeOpsLog } from './opsLogService';
 
 interface PendingRequest {
   resolve: (val: {
@@ -102,9 +103,38 @@ export class IntelbrasAutoRegisterService {
       logger.warn('AutoRegister device not found during connection handling', {
         deviceId,
       });
+
+      void writeOpsLog({
+        level: 'warn',
+        source: 'intelbras_autoreg',
+        category: 'tcp_tunnel',
+        outcome: 'tunnel_rejected',
+        message: 'Conexão TCP rejeitada: dispositivo não localizado ou serial inválido',
+        deviceId: undefined,
+        deviceRef: deviceId, // Intelbras Serial
+        metadata: { serverIp, devClass },
+      });
+
       socket.destroy();
       return;
     }
+
+    // Base ops log for this device
+    const baseLog = {
+      source: 'intelbras_autoreg',
+      category: 'tcp_tunnel',
+      deviceId: device.id,
+      deviceName: (device as any).name,
+      deviceRef: deviceId, // Internal serial
+    };
+
+    void writeOpsLog({
+      ...baseLog,
+      level: 'info',
+      outcome: 'tunnel_handshake_start',
+      message: 'Conexão TCP raw recebida na porta 7010. Iniciando handshake HTTP/Digest.',
+      metadata: { serverIp, devClass },
+    });
 
     // Per Intelbras docs: acknowledge the connection with HTTP 200 OK.
     // The socket has already been detached from Node.js HTTP server by the route handler,
@@ -177,6 +207,13 @@ export class IntelbrasAutoRegisterService {
         deviceDbId: device.id,
       });
 
+      void writeOpsLog({
+        ...baseLog,
+        level: 'info',
+        outcome: 'tunnel_auth_ok',
+        message: 'Autenticação Digest concluída com sucesso. Túnel TCP reverso estabelecido.',
+      });
+
       await autoRegisterPresenceService.touchSession(deviceId, {
         status: 'authenticated',
         tokenReady: true,
@@ -191,6 +228,15 @@ export class IntelbrasAutoRegisterService {
         deviceDbId: device.id,
         error: err.message,
       });
+
+      void writeOpsLog({
+        ...baseLog,
+        level: 'error',
+        outcome: 'tunnel_auth_failed',
+        message: 'Falha na autenticação Digest do túnel ou timeout',
+        metadata: { error: err.message },
+      });
+
       socket.destroy();
     }
   }
@@ -279,6 +325,16 @@ export class IntelbrasAutoRegisterService {
     logger.info('AutoRegister connection closed', {
       deviceId,
       deviceDbId: conn.deviceDBId,
+    });
+
+    void writeOpsLog({
+      level: 'warn', // Consider this a warning so it flags attention if it loops
+      source: 'intelbras_autoreg',
+      category: 'tcp_tunnel',
+      outcome: 'tunnel_closed',
+      message: 'Túnel TCP desconectado / socket encerrado',
+      deviceId: conn.deviceDBId,
+      deviceRef: deviceId,
     });
   }
 

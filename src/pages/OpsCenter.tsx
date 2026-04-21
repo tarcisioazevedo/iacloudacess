@@ -419,6 +419,7 @@ export default function OpsCenter() {
               <select value={source} onChange={(event) => setSource(event.target.value)} style={selectStyle}>
                 <option value="">Todas</option>
                 <option value="intelbras_webhook">intelbras_webhook</option>
+                <option value="intelbras_autoreg">intelbras_autoreg (TCP Tunnel)</option>
                 <option value="device_diagnostics">device_diagnostics</option>
               </select>
             </label>
