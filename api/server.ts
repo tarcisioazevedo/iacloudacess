@@ -58,150 +58,152 @@ const WEB_INDEX_PATH = path.join(WEB_DIST_PATH, 'index.html');
 const HAS_WEB_DIST = existsSync(WEB_INDEX_PATH);
 
 const app = express();
+const httpServer = createServer(app);
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// RAW HTTP HANDLER: Intercept AutoRegister tunnel requests BEFORE Express.
-// The Intelbras CGI AutoRegister protocol requires socket hijacking — the device
-// opens a POST, receives a 200 OK, then the roles reverse and the server sends
-// HTTP requests TO the device over the same TCP socket. Express's HTTP parser
-// interferes with this by trying to parse the device's responses as new HTTP
-// requests. By intercepting at the http.Server level, Express never touches
-// these connections.
+// INTELBRAS CGI AUTO-REGISTER: Raw TCP Server on port 7010
+//
+// The Intelbras CGI AutoRegister protocol is a REVERSE TUNNEL protocol:
+//   1. Device → Server: POST /connect (body: {DevClass, DeviceID, ServerIP})
+//   2. Server → Device: HTTP 200 OK
+//   3. Server → Device: POST /login (the server acts as HTTP CLIENT)
+//   4. Device → Server: HTTP 401 + Digest challenge
+//   5. Server → Device: POST /login + Digest auth
+//   6. Device → Server: HTTP 200 + Token
+//   7. Server → Device: POST /keep-alive every 20s
+//
+// This protocol CANNOT go through an HTTP reverse proxy (Traefik) because
+// after step 2, the roles reverse — the server sends HTTP requests TO the
+// device through the SAME TCP socket. An L7 proxy would intercept these
+// and break the tunnel.
+//
+// Solution: Raw TCP server (net.Server) on a dedicated port, exposed directly
+// to the internet without any HTTP proxy. The server manually parses the
+// incoming HTTP POST request from the device.
 // ═══════════════════════════════════════════════════════════════════════════════
-const httpServer = createServer((req, res) => {
-  if (
-    req.method === 'POST' &&
-    req.url?.startsWith('/cgi-bin/api/autoRegist/connect')
-  ) {
-    handleAutoRegistRawConnection(req, res);
-    return;
-  }
-  // Everything else goes through Express normally
-  app(req, res);
-});
+import { createServer as createTcpServer, Socket as NetSocket } from 'net';
 
-/**
- * Handle Intelbras CGI AutoRegister connection at the raw HTTP level.
- * This runs OUTSIDE of Express — no middleware, no parser interference.
- *
- * Strategy: Complete the HTTP transaction properly using res.end(), then
- * steal the underlying socket before Node.js HTTP server can reinitialize
- * the parser for the next request.
- */
-function handleAutoRegistRawConnection(
-  req: import('http').IncomingMessage,
-  res: import('http').ServerResponse,
-) {
-  const chunks: Buffer[] = [];
+const AUTOREG_TCP_PORT = parseInt(process.env.AUTOREG_TCP_PORT || '7010', 10);
 
-  req.on('data', (chunk: Buffer) => chunks.push(chunk));
-  req.on('end', () => {
-    // Parse the device's JSON body
-    let body: any = {};
-    try {
-      body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    } catch {
-      logger.warn('[AutoRegister] Failed to parse raw body as JSON');
-      res.writeHead(400);
-      res.end();
-      return;
-    }
+const autoregTcpServer = createTcpServer((socket: NetSocket) => {
+  logger.info('[AutoRegister TCP] New raw TCP connection', {
+    remoteAddress: socket.remoteAddress,
+    remotePort: socket.remotePort,
+  });
 
-    const { DevClass, DeviceID, ServerIP } = body;
-    if (!DeviceID) {
-      logger.warn('[AutoRegister] Missing DeviceID in body');
-      res.writeHead(400);
-      res.end();
-      return;
-    }
+  // Configure socket
+  socket.setTimeout(30_000); // 30s to receive the initial POST
+  socket.setNoDelay(true);
+  socket.setKeepAlive(true, 10_000);
 
-    logger.info('[AutoRegister] Raw TCP connection intercepted before Express', {
-      deviceId: DeviceID,
-      devClass: DevClass,
-    });
+  let buffer = Buffer.alloc(0);
+  let headersParsed = false;
 
-    // Get the underlying socket BEFORE sending the response.
-    // After res.end(), Node.js HTTP server will try to reclaim this socket
-    // for the next HTTP request. We must steal it first.
-    const socket = req.socket;
+  const onData = (chunk: Buffer) => {
+    buffer = Buffer.concat([buffer, chunk]);
 
-    // Step 1: Send the HTTP 200 OK response that the Intelbras protocol requires.
-    // We send it via raw socket.write() to avoid triggering Node.js HTTP server's
-    // response completion handlers (which would try to reinitialize the parser).
-    // We deliberately do NOT use res.writeHead/res.end - that triggers the HTTP
-    // server's keepalive logic and parser reinitialization.
-    
-    // Step 2: Remove ALL listeners from the socket to fully detach from HTTP server.
-    // This must happen BEFORE writing anything, so the HTTP server's internal
-    // handlers don't fire during our write.
-    const existingListeners = {
-      data: socket.listeners('data').slice(),
-      end: socket.listeners('end').slice(),
-      close: socket.listeners('close').slice(),
-      error: socket.listeners('error').slice(),
-      drain: socket.listeners('drain').slice(),
-      timeout: socket.listeners('timeout').slice(),
-    };
-    
-    socket.removeAllListeners();
-
-    // Step 3: Configure for long-lived tunnel
-    socket.setTimeout(0);
-    socket.setNoDelay(true);
-    socket.setKeepAlive(true, 10_000);
-    
-    // Step 4: Set up our own minimal error handler
-    socket.on('error', (err) => {
-      logger.warn('[AutoRegister] Socket error after hijack', { error: err.message, DeviceID });
-    });
-
-    // Step 5: Detach HTTP parser from socket's native handle.
-    // parser.unconsume() detaches the C++ parser from the libuv handle.
-    // After this, data from the socket goes to normal JS 'data' events
-    // instead of being routed through the HTTP parser.
-    // IMPORTANT: Do NOT call parser.close() — it destroys the socket's
-    // read mechanism entirely. Just unconsume + null the reference.
-    const parser = (socket as any).parser;
-    if (parser) {
-      if (typeof parser.unconsume === 'function') {
-        parser.unconsume();
+    if (!headersParsed) {
+      // Look for the end of HTTP headers (\r\n\r\n)
+      const headerEnd = buffer.indexOf('\r\n\r\n');
+      if (headerEnd === -1) {
+        // Haven't received full headers yet, keep buffering
+        if (buffer.length > 8192) {
+          // Headers too large, reject
+          logger.warn('[AutoRegister TCP] Headers too large, dropping connection');
+          socket.destroy();
+        }
+        return;
       }
-      (socket as any).parser = null;
-    }
-    if ((socket as any)._httpMessage) {
-      delete (socket as any)._httpMessage;
-    }
-    (socket as any)._server = null;
 
-    // Step 6: Resume the socket so it can receive data again
-    // (removeAllListeners may have caused pausing)
-    socket.resume();
+      headersParsed = true;
+      const headersStr = buffer.subarray(0, headerEnd).toString('utf8');
+      const bodyStart = headerEnd + 4;
 
-    logger.info('[AutoRegister] Socket hijacked, handing to tunnel service', { DeviceID });
+      // Parse Content-Length from headers
+      const clMatch = headersStr.match(/content-length:\s*(\d+)/i);
+      const contentLength = clMatch ? parseInt(clMatch[1], 10) : 0;
 
-    // Step 7: Look up device and hand off to tunnel service
-    resolveDeviceForAutoRegister(DeviceID).then(({ resolvedId }) => {
-      const service = IntelbrasAutoRegisterService.getInstance();
-      service.handleNewConnection(
-        DeviceID,
-        DevClass || 'unknown',
-        ServerIP || req.socket.remoteAddress || '',
-        socket,
-        resolvedId || undefined,
-      ).catch((err) => {
-        logger.error('[AutoRegister] handleNewConnection failed', { error: err.message });
+      // Check we have the full body
+      const bodyReceived = buffer.length - bodyStart;
+      if (bodyReceived < contentLength) {
+        // Wait for more data
+        return;
+      }
+
+      // We have the full HTTP request — parse the body
+      const bodyBuf = buffer.subarray(bodyStart, bodyStart + contentLength);
+      let body: any = {};
+      try {
+        body = JSON.parse(bodyBuf.toString('utf8'));
+      } catch {
+        logger.warn('[AutoRegister TCP] Failed to parse JSON body');
+        socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      const { DevClass, DeviceID, ServerIP } = body;
+      if (!DeviceID) {
+        logger.warn('[AutoRegister TCP] Missing DeviceID');
+        socket.write('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      logger.info('[AutoRegister TCP] Device connected via raw TCP tunnel', {
+        deviceId: DeviceID,
+        devClass: DevClass,
+        serverIp: ServerIP,
+        remoteAddress: socket.remoteAddress,
+      });
+
+      // Remove our temporary data/timeout handlers — the tunnel service
+      // will set up its own listeners
+      socket.removeListener('data', onData);
+      socket.removeListener('timeout', onTimeout);
+      socket.removeListener('error', onError);
+      socket.setTimeout(0); // Disable timeout for long-lived tunnel
+
+      // Look up device and hand off to tunnel service
+      resolveDeviceForAutoRegister(DeviceID).then(({ resolvedId }) => {
+        const service = IntelbrasAutoRegisterService.getInstance();
+        service.handleNewConnection(
+          DeviceID,
+          DevClass || 'unknown',
+          ServerIP || socket.remoteAddress || '',
+          socket,
+          resolvedId || undefined,
+        ).catch((err) => {
+          logger.error('[AutoRegister TCP] handleNewConnection failed', { error: err.message });
+          socket.destroy();
+        });
+      }).catch((err) => {
+        logger.error('[AutoRegister TCP] Device lookup failed', { error: err.message, DeviceID });
         socket.destroy();
       });
-    }).catch((err) => {
-      logger.error('[AutoRegister] Device lookup failed', { error: err.message, DeviceID });
-      socket.destroy();
-    });
-  });
+    }
+  };
 
-  req.on('error', () => {
-    req.socket.destroy();
+  const onTimeout = () => {
+    logger.warn('[AutoRegister TCP] Connection timeout waiting for HTTP request');
+    socket.destroy();
+  };
+
+  const onError = (err: Error) => {
+    logger.warn('[AutoRegister TCP] Socket error during handshake', { error: err.message });
+    socket.destroy();
+  };
+
+  socket.on('data', onData);
+  socket.on('timeout', onTimeout);
+  socket.on('error', onError);
+  socket.on('close', () => {
+    socket.removeListener('data', onData);
   });
-}
+});
+
+// Start TCP server alongside HTTP server (done in the listen section below)
+
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -594,6 +596,13 @@ httpServer.listen(PORT, () => {
     worker: IS_WORKER,
     autoregGateway: IS_AUTOREG_GATEWAY,
   });
+
+  // Start raw TCP server for Intelbras CGI AutoRegister reverse tunnel
+  if (IS_AUTOREG_GATEWAY) {
+    autoregTcpServer.listen(AUTOREG_TCP_PORT, () => {
+      logger.info(`[AutoRegister TCP] Raw TCP tunnel server listening on port ${AUTOREG_TCP_PORT}`);
+    });
+  }
 
   bootstrap().catch((err) => logger.error('Bootstrap fatal error', { error: err.message }));
 });

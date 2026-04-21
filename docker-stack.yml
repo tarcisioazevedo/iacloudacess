@@ -332,6 +332,7 @@ services:
       NODE_ENV: production
       PORT: "4000"
       AUTOREG_GATEWAY_MODE: "true"
+      AUTOREG_TCP_PORT: "7010"
       DB_USER: ${DB_USER:-schooladmin}
       DB_HOST: pgbouncer
       DB_PORT: "5432"
@@ -341,6 +342,12 @@ services:
       AUTOREG_INTERNAL_TOKEN: ${AUTOREG_INTERNAL_TOKEN:-change-me-autoreg-internal-token}
       AUTOREG_PUBLIC_BASE_URL: ${PUBLIC_PROTOCOL:-http}://${DOMAIN:-localhost}
       ALLOWED_ORIGINS: "http://${DOMAIN:-localhost},https://${DOMAIN:-localhost},https://www.${DOMAIN:-localhost}"
+    # Expose the raw TCP tunnel port directly (NOT through Traefik).
+    # The Intelbras CGI AutoRegister protocol is a reverse tunnel that requires
+    # direct TCP passthrough — an L7 HTTP proxy would intercept the server→device
+    # requests and break the tunnel.
+    ports:
+      - "7010:7010"
     # Override Dockerfile HEALTHCHECK: use /api/ready (always 200, no DB check)
     # The Intelbras autoreg gateway doesn't need DB health for its own liveness.
     healthcheck:
@@ -372,6 +379,7 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=true"
+        # Keep HTTP route for /cgi-bin health checks / fallback
         - "traefik.http.routers.autoreg.rule=PathPrefix(`/cgi-bin/api/autoRegist`)"
         - "traefik.http.routers.autoreg.entrypoints=web,websecure"
         - "traefik.http.routers.autoreg.priority=50"
