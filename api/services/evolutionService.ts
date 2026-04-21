@@ -1,5 +1,10 @@
-import axios from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 import { getEvolutionApiToken, getEvolutionApiUrl } from '../lib/runtimeConfig';
+import { logger } from '../lib/logger';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Evolution API v2 — Service Layer (Lazy init, robust QR extraction)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export interface EvolutionInstanceSnapshot {
   instanceName: string;
@@ -21,14 +26,48 @@ export interface EvolutionConnectPayload {
   raw: any;
 }
 
-const evolutionApi = axios.create({
-  baseURL: getEvolutionApiUrl(),
-  timeout: 15000,
-  headers: {
-    apikey: getEvolutionApiToken(),
-    'Content-Type': 'application/json',
-  },
-});
+// ─── Lazy axios instance ─────────────────────────────────────────────────────
+// Created on first use (not at module load time) so env vars are guaranteed to
+// be populated by Docker runtime / secrets / entrypoint.sh.
+let _axiosInstance: AxiosInstance | null = null;
+
+function getApi(): AxiosInstance {
+  if (!_axiosInstance) {
+    const baseURL = getEvolutionApiUrl();
+    const apikey = getEvolutionApiToken();
+    logger.info('[EvolutionService] Initializing axios', { baseURL, hasToken: !!apikey });
+
+    _axiosInstance = axios.create({
+      baseURL,
+      timeout: 20_000,
+      headers: {
+        apikey,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Debug interceptor: log outgoing requests (without bodies)
+    _axiosInstance.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (axios.isAxiosError(error)) {
+          logger.warn('[EvolutionService] API error', {
+            method: error.config?.method?.toUpperCase(),
+            url: error.config?.url,
+            status: error.response?.status,
+            data: typeof error.response?.data === 'string'
+              ? error.response.data.slice(0, 300)
+              : JSON.stringify(error.response?.data ?? {}).slice(0, 300),
+          });
+        }
+        return Promise.reject(error);
+      },
+    );
+  }
+  return _axiosInstance;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function sanitizeSegment(value: string): string {
   return value
@@ -91,8 +130,62 @@ export function buildSchoolInstanceName(input: {
   return `school-${integrator}-${school}-wa`.slice(0, 80);
 }
 
+// ─── QR Code extraction ─────────────────────────────────────────────────────
+// Evolution API v2.x returns QR data in inconsistent structures depending on
+// the version and whether `qrcode: true` was set during instance creation.
+// This function forensically extracts the QR payload from ALL known formats.
+function extractQrPayload(data: any): string | null {
+  if (!data) return null;
+
+  // 1. Direct base64 image at root: { base64: "data:image/png;base64,..." }
+  if (typeof data.base64 === 'string' && data.base64.length > 10) {
+    return data.base64;
+  }
+
+  // 2. Nested in qrcode object: { qrcode: { base64: "data:image/..." } }
+  if (data.qrcode && typeof data.qrcode === 'object') {
+    if (typeof data.qrcode.base64 === 'string' && data.qrcode.base64.length > 10) {
+      return data.qrcode.base64;
+    }
+    // 2b. QR code as raw string in qrcode.code
+    if (typeof data.qrcode.code === 'string' && data.qrcode.code.length > 10) {
+      return data.qrcode.code;
+    }
+  }
+
+  // 3. qrcode as direct string: { qrcode: "data:image/png;base64,..." }
+  if (typeof data.qrcode === 'string' && data.qrcode.length > 10) {
+    return data.qrcode;
+  }
+
+  // 4. Raw QR code string: { code: "2@abc..." }
+  if (typeof data.code === 'string' && data.code.length > 10) {
+    return data.code;
+  }
+
+  // 5. Nested in response object (v2 wrap)
+  if (data.response) {
+    return extractQrPayload(data.response);
+  }
+
+  return null;
+}
+
+function extractPairingCode(data: any): string | null {
+  return data?.pairingCode ?? data?.response?.pairingCode ?? null;
+}
+
+function extractCount(data: any): number | null {
+  const c = data?.count ?? data?.qrcode?.count ?? data?.response?.count;
+  return typeof c === 'number' ? c : null;
+}
+
+// ─── API Functions ───────────────────────────────────────────────────────────
+
 export async function createEvolutionInstance(instanceName: string) {
-  const { data } = await evolutionApi.post('/instance/create', {
+  logger.info('[EvolutionService] Creating instance', { instanceName });
+
+  const { data } = await getApi().post('/instance/create', {
     instanceName,
     integration: 'WHATSAPP-BAILEYS',
     token: '',
@@ -105,26 +198,51 @@ export async function createEvolutionInstance(instanceName: string) {
     syncFullHistory: false,
   });
 
+  logger.info('[EvolutionService] Instance created', {
+    instanceName,
+    responseKeys: Object.keys(data || {}),
+  });
+
   return {
     raw: data,
     snapshot: normalizeInstancePayload(data?.instance ? data : data?.response ?? data),
   };
 }
 
-export async function connectEvolutionInstance(instanceName: string, phoneNumber?: string | null): Promise<EvolutionConnectPayload> {
+export async function connectEvolutionInstance(
+  instanceName: string,
+  phoneNumber?: string | null,
+): Promise<EvolutionConnectPayload> {
+  logger.info('[EvolutionService] Connecting instance', { instanceName, hasPhone: !!phoneNumber });
+
   const params = phoneNumber ? { number: normalizePhoneNumber(phoneNumber) } : undefined;
-  const { data } = await evolutionApi.get(`/instance/connect/${encodeURIComponent(instanceName)}`, { params });
+  const { data } = await getApi().get(
+    `/instance/connect/${encodeURIComponent(instanceName)}`,
+    { params },
+  );
+
+  const qrCodePayload = extractQrPayload(data);
+  const pairingCode = extractPairingCode(data);
+
+  logger.info('[EvolutionService] Connect result', {
+    instanceName,
+    hasQr: !!qrCodePayload,
+    qrType: qrCodePayload?.startsWith('data:image/') ? 'base64-image' : qrCodePayload ? 'raw-string' : 'none',
+    qrLength: qrCodePayload?.length ?? 0,
+    hasPairingCode: !!pairingCode,
+    responseKeys: Object.keys(data || {}),
+  });
 
   return {
-    pairingCode: data?.pairingCode ?? null,
-    qrCodePayload: typeof data?.qrcode === 'string' ? data.qrcode : (data?.qrcode?.base64 ?? data?.base64 ?? data?.code ?? null),
-    count: typeof data?.count === 'number' ? data.count : (data?.qrcode?.count ?? null),
+    pairingCode,
+    qrCodePayload,
+    count: extractCount(data),
     raw: data,
   };
 }
 
 export async function fetchEvolutionInstance(instanceName: string): Promise<EvolutionInstanceSnapshot | null> {
-  const { data } = await evolutionApi.get('/instance/fetchInstances', {
+  const { data } = await getApi().get('/instance/fetchInstances', {
     params: { instanceName },
   });
 
@@ -140,17 +258,17 @@ export async function fetchEvolutionInstance(instanceName: string): Promise<Evol
 }
 
 export async function getEvolutionConnectionState(instanceName: string): Promise<string | null> {
-  const { data } = await evolutionApi.get(`/instance/connectionState/${encodeURIComponent(instanceName)}`);
-  return data?.instance?.state ?? data?.response?.instance?.state ?? null;
+  const { data } = await getApi().get(`/instance/connectionState/${encodeURIComponent(instanceName)}`);
+  return data?.instance?.state ?? data?.response?.instance?.state ?? data?.state ?? null;
 }
 
 export async function logoutEvolutionInstance(instanceName: string) {
-  const { data } = await evolutionApi.delete(`/instance/logout/${encodeURIComponent(instanceName)}`);
+  const { data } = await getApi().delete(`/instance/logout/${encodeURIComponent(instanceName)}`);
   return data;
 }
 
 export async function deleteEvolutionInstance(instanceName: string) {
-  const { data } = await evolutionApi.delete(`/instance/delete/${encodeURIComponent(instanceName)}`);
+  const { data } = await getApi().delete(`/instance/delete/${encodeURIComponent(instanceName)}`);
   return data;
 }
 
@@ -162,6 +280,8 @@ export async function restartEvolutionInstance(instanceName: string): Promise<{
   snapshot: EvolutionInstanceSnapshot | null;
   connect: EvolutionConnectPayload;
 }> {
+  logger.info('[EvolutionService] Restarting instance (delete + recreate)', { instanceName });
+
   // 1. Try to delete the old instance (ignore errors if it doesn't exist)
   await deleteEvolutionInstance(instanceName).catch(() => {});
 
@@ -171,7 +291,7 @@ export async function restartEvolutionInstance(instanceName: string): Promise<{
   // 3. Create fresh
   const created = await createEvolutionInstance(instanceName);
 
-  // 4. Wait for the websocket to initialise before requesting connect
+  // 4. Wait for the WebSocket to initialise before requesting connect
   await new Promise(r => setTimeout(r, 3000));
 
   // 5. Connect — this should now return a QR code
@@ -180,11 +300,17 @@ export async function restartEvolutionInstance(instanceName: string): Promise<{
   // 6. Get updated snapshot
   const snapshot = await syncEvolutionInstance(instanceName).catch(() => created.snapshot ?? null);
 
+  logger.info('[EvolutionService] Restart complete', {
+    instanceName,
+    hasQr: !!connect.qrCodePayload,
+    connectionState: snapshot?.connectionState,
+  });
+
   return { snapshot, connect };
 }
 
 export async function sendEvolutionText(instanceName: string, phoneNumber: string, text: string) {
-  const { data } = await evolutionApi.post(`/message/sendText/${encodeURIComponent(instanceName)}`, {
+  const { data } = await getApi().post(`/message/sendText/${encodeURIComponent(instanceName)}`, {
     number: normalizePhoneNumber(phoneNumber),
     text,
   });
@@ -192,7 +318,7 @@ export async function sendEvolutionText(instanceName: string, phoneNumber: strin
 }
 
 export async function sendEvolutionMedia(instanceName: string, phoneNumber: string, mediaUrl: string, caption?: string) {
-  const { data } = await evolutionApi.post(`/message/sendMedia/${encodeURIComponent(instanceName)}`, {
+  const { data } = await getApi().post(`/message/sendMedia/${encodeURIComponent(instanceName)}`, {
     number: normalizePhoneNumber(phoneNumber),
     mediatype: 'image',
     mimetype: 'image/jpeg',

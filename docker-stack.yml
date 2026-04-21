@@ -140,8 +140,8 @@ services:
       MIN_POOL_SIZE: "5"
       RESERVE_POOL_SIZE: "5"
       RESERVE_POOL_TIMEOUT: "3"
-      # Accept SCRAM-SHA-256 from clients (Prisma uses SCRAM by default with pg 16)
-      AUTH_TYPE: scram-sha-256
+      # Prisma utilizes the md5 hash mechanism perfectly over pgbouncer pool mode
+      AUTH_TYPE: md5
       IGNORE_STARTUP_PARAMETERS: extra_float_digits
       SERVER_RESET_QUERY: ""
       SERVER_IDLE_TIMEOUT: "600"
@@ -275,6 +275,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
       # Socket.io Redis adapter (for multi-replica)
       SOCKETIO_REDIS_URL: redis://redis:6379
+      # Evolution API (WhatsApp) — internal Docker DNS, NOT through Traefik
+      EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_API_TOKEN: ${EVOLUTION_API_TOKEN:-global-secret-token}
       # Misc
       ALLOWED_ORIGINS: "http://${DOMAIN:-localhost},https://${DOMAIN:-localhost},https://www.${DOMAIN:-localhost}"
       MIGRATE_ON_START: "false"
@@ -442,6 +445,9 @@ services:
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      # Evolution API (WhatsApp) — internal Docker DNS
+      EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_API_TOKEN: ${EVOLUTION_API_TOKEN:-global-secret-token}
     # O worker é um processador de jobs BullMQ — não expõe HTTP de forma confiável.
     # Checar Redis (dependência real do worker) em vez do endpoint HTTP da API.
     healthcheck:

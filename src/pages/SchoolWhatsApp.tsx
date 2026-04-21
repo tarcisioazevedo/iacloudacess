@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquare, RefreshCw, Power, Send, Copy, ShieldCheck, Smartphone, Building2, Link2, CheckCircle2, XCircle, Loader2, QrCode, Trash2 } from 'lucide-react';
+import { MessageSquare, RefreshCw, Power, Send, Copy, ShieldCheck, Smartphone, Building2, Link2, CheckCircle2, XCircle, Loader2, QrCode as QrCodeIcon, Trash2 } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -116,7 +117,7 @@ function QrCountdown({ lastQrAt }: { lastQrAt: string | null }) {
   );
 }
 
-export default function SchoolWhatsApp() {
+export default function SchoolWhatsApp({ isHubMode = false }: { isHubMode?: boolean }) {
   const { token, profile, isDemo } = useAuth();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -416,13 +417,17 @@ export default function SchoolWhatsApp() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: 'var(--color-primary-800)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <MessageSquare size={22} color="#25D366" />
-            WhatsApp por Escola
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
-            Cada escola opera com sua propria instancia Evolution e seu proprio numero, isolados por tenant.
-          </p>
+          {!isHubMode && (
+            <>
+              <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: 'var(--color-primary-800)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <MessageSquare size={22} color="#25D366" />
+                WhatsApp por Escola
+              </h1>
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
+                Cada escola opera com sua propria instancia Evolution e seu proprio numero, isolados por tenant.
+              </p>
+            </>
+          )}
         </div>
 
         {!lockedToOwnSchool && (
@@ -545,7 +550,7 @@ export default function SchoolWhatsApp() {
 
               <div style={{ display: 'grid', gap: 8 }}>
                 <strong style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <QrCode size={16} color="#25D366" /> Pareamento da escola
+                  <QrCodeIcon size={16} color="#25D366" /> Pareamento da escola
                   {isWaiting && (
                     <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> auto-refresh ativo
@@ -586,28 +591,26 @@ export default function SchoolWhatsApp() {
                       </div>
 
                       {/* QR Code display */}
-                      {imageLikeQr(data.channel?.qrCodePayload) ? (
+                      {data.channel?.qrCodePayload ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                             Ou escaneie o QR Code abaixo:
                           </div>
-                          <div className="wa-qr-frame">
-                            <img
-                              src={data.channel?.qrCodePayload || ''}
-                              alt="QR Code WhatsApp"
-                              style={{ width: 220, height: 220, objectFit: 'contain' }}
-                            />
+                          <div className="wa-qr-frame" style={{ background: '#fff' }}>
+                            {imageLikeQr(data.channel.qrCodePayload) ? (
+                              <img
+                                src={data.channel.qrCodePayload}
+                                alt="QR Code WhatsApp"
+                                style={{ width: 220, height: 220, objectFit: 'contain' }}
+                              />
+                            ) : (
+                              <QRCode
+                                value={data.channel.qrCodePayload}
+                                size={220}
+                                level="M"
+                              />
+                            )}
                           </div>
-                          <QrCountdown lastQrAt={data.channel?.lastQrAt ?? null} />
-                        </div>
-                      ) : data.channel?.qrCodePayload ? (
-                        <div>
-                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 6 }}>Codigo bruto retornado pela Evolution</div>
-                          <textarea
-                            readOnly
-                            value={data.channel.qrCodePayload}
-                            style={{ width: '100%', minHeight: 100, resize: 'vertical', padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
-                          />
                           <QrCountdown lastQrAt={data.channel?.lastQrAt ?? null} />
                         </div>
                       ) : (
