@@ -212,7 +212,7 @@ router.get('/messaging/whatsapp', requireRole('superadmin', 'integrator_admin', 
           instanceName: channel.instanceName,
           channel,
           snapshot,
-          connect: connectData && connectData.qrCodePayload ? connectData : undefined,
+          connect: connectData,
         });
       }
     } catch (err) {
