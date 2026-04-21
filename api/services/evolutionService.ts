@@ -149,6 +149,40 @@ export async function logoutEvolutionInstance(instanceName: string) {
   return data;
 }
 
+export async function deleteEvolutionInstance(instanceName: string) {
+  const { data } = await evolutionApi.delete(`/instance/delete/${encodeURIComponent(instanceName)}`);
+  return data;
+}
+
+/**
+ * Destroys a stuck instance and recreates it from scratch, returning a fresh
+ * connect payload that should contain the QR code / pairing code.
+ */
+export async function restartEvolutionInstance(instanceName: string): Promise<{
+  snapshot: EvolutionInstanceSnapshot | null;
+  connect: EvolutionConnectPayload;
+}> {
+  // 1. Try to delete the old instance (ignore errors if it doesn't exist)
+  await deleteEvolutionInstance(instanceName).catch(() => {});
+
+  // 2. Small delay so Evolution API finishes cleanup
+  await new Promise(r => setTimeout(r, 2000));
+
+  // 3. Create fresh
+  const created = await createEvolutionInstance(instanceName);
+
+  // 4. Wait for the websocket to initialise before requesting connect
+  await new Promise(r => setTimeout(r, 3000));
+
+  // 5. Connect — this should now return a QR code
+  const connect = await connectEvolutionInstance(instanceName);
+
+  // 6. Get updated snapshot
+  const snapshot = await syncEvolutionInstance(instanceName).catch(() => created.snapshot ?? null);
+
+  return { snapshot, connect };
+}
+
 export async function sendEvolutionText(instanceName: string, phoneNumber: string, text: string) {
   const { data } = await evolutionApi.post(`/message/sendText/${encodeURIComponent(instanceName)}`, {
     number: normalizePhoneNumber(phoneNumber),

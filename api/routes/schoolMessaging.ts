@@ -8,7 +8,9 @@ import {
   buildSchoolInstanceName,
   connectEvolutionInstance,
   createEvolutionInstance,
+  deleteEvolutionInstance,
   logoutEvolutionInstance,
+  restartEvolutionInstance,
   sendEvolutionText,
   syncEvolutionInstance,
 } from '../services/evolutionService';
@@ -274,7 +276,18 @@ router.post('/messaging/whatsapp/instance', requireRole('superadmin', 'integrato
       snapshot = created.snapshot ?? null;
     }
 
-    const connect = await connectEvolutionInstance(instanceName);
+    // First attempt to connect
+    let connect = await connectEvolutionInstance(instanceName);
+
+    // If connect returned no QR and no pairing code, the instance is stuck.
+    // Delete it entirely and recreate from scratch.
+    const hasQrOrCode = !!(connect.qrCodePayload || connect.pairingCode);
+    if (!hasQrOrCode && snapshot?.connectionState !== 'open') {
+      const restarted = await restartEvolutionInstance(instanceName);
+      snapshot = restarted.snapshot;
+      connect = restarted.connect;
+    }
+
     const syncedSnapshot = await syncEvolutionInstance(instanceName).catch(() => snapshot);
 
     const channel = await persistChannelState({
@@ -442,6 +455,49 @@ router.post('/messaging/whatsapp/logout', requireRole('superadmin', 'integrator_
 
     return res.json({
       channel: serializeChannel(updatedChannel),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: getErrorMessage(err) });
+  }
+});
+
+// ── Delete instance (nuke from Evolution + local DB) ──────────────────
+router.post('/messaging/whatsapp/delete-instance', requireRole('superadmin', 'integrator_admin'), async (req: Request, res: Response) => {
+  try {
+    const school = await loadSchool(req);
+    if (!school) {
+      return res.status(404).json({ message: 'Escola nao encontrada' });
+    }
+
+    const channel = await prisma.schoolMessagingChannel.findUnique({
+      where: {
+        schoolId_provider: {
+          schoolId: school.id,
+          provider: 'evolution',
+        },
+      },
+    });
+
+    if (!channel) {
+      return res.status(404).json({ message: 'Canal WhatsApp ainda nao configurado para esta escola' });
+    }
+
+    // 1. Delete from Evolution API (ignore if already gone)
+    await deleteEvolutionInstance(channel.instanceName).catch(() => {});
+
+    // 2. Remove from local DB
+    await prisma.schoolMessagingChannel.delete({
+      where: { id: channel.id },
+    });
+
+    await auditLog(req, school, 'school.messaging.instance_deleted', {
+      schoolId: school.id,
+      instanceName: channel.instanceName,
+    });
+
+    return res.json({
+      ok: true,
+      message: 'Instancia excluida com sucesso. Voce pode criar uma nova a qualquer momento.',
     });
   } catch (err) {
     return res.status(500).json({ message: getErrorMessage(err) });

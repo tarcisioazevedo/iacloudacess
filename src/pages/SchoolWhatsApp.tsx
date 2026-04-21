@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquare, RefreshCw, Power, Send, Copy, ShieldCheck, Smartphone, Building2, Link2, CheckCircle2, XCircle, Loader2, QrCode } from 'lucide-react';
+import { MessageSquare, RefreshCw, Power, Send, Copy, ShieldCheck, Smartphone, Building2, Link2, CheckCircle2, XCircle, Loader2, QrCode, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -357,6 +357,32 @@ export default function SchoolWhatsApp() {
     }
   };
 
+  const handleDeleteInstance = async () => {
+    if (!confirm('Tem certeza que deseja EXCLUIR a instancia WhatsApp desta escola?\n\nIsso ira remover completamente a instancia da Evolution API e do banco de dados. Voce podera criar uma nova depois.')) {
+      return;
+    }
+    setWorking(true);
+    try {
+      const res = await fetch(`/api/schools/${resolvedSchoolId}/messaging/whatsapp/delete-instance`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.message || 'Falha ao excluir instancia');
+      // Clear local state so UI resets to "no channel" mode
+      setData(prev => prev ? { ...prev, channel: null } : prev);
+      setInstanceName('');
+      toast.success('Instancia excluida com sucesso!');
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao excluir a instancia');
+    } finally {
+      setWorking(false);
+    }
+  };
+
   if (loadingSchools) {
     return <SkeletonCard height={320} />;
   }
@@ -490,6 +516,15 @@ export default function SchoolWhatsApp() {
                   </button>
                   <button className="btn btn-danger" onClick={handleLogout} disabled={working || !data.channel}>
                     <Power size={14} /> Logout
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={handleDeleteInstance}
+                    disabled={working || !data.channel}
+                    style={{ background: '#7f1d1d', borderColor: '#7f1d1d' }}
+                    title="Excluir completamente a instancia da Evolution e do banco"
+                  >
+                    <Trash2 size={14} /> Excluir Instancia
                   </button>
                 </div>
               </div>
