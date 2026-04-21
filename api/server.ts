@@ -155,8 +155,17 @@ function handleAutoRegistRawConnection(
       logger.warn('[AutoRegister] Socket error after hijack', { error: err.message, DeviceID });
     });
 
-    // Step 5: Null out HTTP server's references to this socket
-    if ((socket as any).parser) {
+    // Step 5: Detach HTTP parser from socket's native handle.
+    // parser.unconsume() detaches the C++ parser from the libuv handle.
+    // After this, data from the socket goes to normal JS 'data' events
+    // instead of being routed through the HTTP parser.
+    // IMPORTANT: Do NOT call parser.close() — it destroys the socket's
+    // read mechanism entirely. Just unconsume + null the reference.
+    const parser = (socket as any).parser;
+    if (parser) {
+      if (typeof parser.unconsume === 'function') {
+        parser.unconsume();
+      }
       (socket as any).parser = null;
     }
     if ((socket as any)._httpMessage) {
