@@ -1,0 +1,29 @@
+name: Deploy to Swarm
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Ubuntu Host (Swarm)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /opt/iacloudacess
+            echo "Pulling latest changes from Git..."
+            git pull origin main
+            
+            echo "Rebuilding required images..."
+            docker-compose -f docker-compose.yml build
+            
+            echo "Deploying Docker Stack..."
+            export $(grep -v '^#' .env | xargs) && docker stack deploy -c docker-stack.yml school --with-registry-auth
+            
+            echo "Deployment successful."

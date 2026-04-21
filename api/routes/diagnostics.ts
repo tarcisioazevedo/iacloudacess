@@ -176,5 +176,62 @@ router.post('/device/:id/ping', requireRole('integrator_admin', 'integrator_supp
     return res.status(500).json({ message: err.message });
   }
 });
+// POST /api/diagnostics/device/:id/reboot — Attempts to remote reboot a device
+router.post('/device/:id/reboot', requireRole('integrator_admin', 'integrator_support', 'superadmin'), async (req: Request, res: Response) => {
+  try {
+    const device = await prisma.device.findFirst({
+      where: { id: req.params.id, ...deviceTenantWhere(req.user) },
+      include: {
+        schoolUnit: { include: { school: true } },
+      },
+    });
+
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado ou acesso restrito' });
+
+    const transport = resolveDeviceTransport(device);
+    const baseOpsLog = {
+      source: 'device_diagnostics',
+      category: 'remote_action',
+      requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
+      integratorId: device.schoolUnit.school.integratorId,
+      schoolId: device.schoolUnit.school.id,
+      schoolUnitId: device.schoolUnitId,
+      schoolName: device.schoolUnit.school.name,
+      deviceId: device.id,
+      deviceName: device.name,
+      deviceRef: device.localIdentifier || device.serialNumber || device.id,
+      transport: transport.effectiveTransport,
+    };
+
+    if (transport.effectiveTransport !== 'cloud_autoreg' && transport.effectiveTransport !== 'direct_http') {
+      return res.status(409).json({ message: 'Reboot remoto só está disponível para hardwares via AutoRegister ou IP direto.' });
+    }
+
+    try {
+      const client = getDeviceClient(device);
+      await client.reboot();
+      
+      void writeOpsLog({
+        ...baseOpsLog,
+        level: 'info',
+        outcome: 'reboot_ok',
+        message: 'Comando de reinicialização remota enviado com sucesso ao dispositivo.',
+      });
+
+      return res.json({ status: 'success', message: 'Reboot command sent.' });
+    } catch (err: any) {
+      void writeOpsLog({
+        ...baseOpsLog,
+        level: 'error',
+        outcome: 'reboot_failed',
+        message: 'Falha ao enviar comando de reboot',
+        metadata: { error: err.message },
+      });
+      return res.status(502).json({ message: 'Falha ao contactar CGI da catraca: ' + err.message });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
 
 export default router;

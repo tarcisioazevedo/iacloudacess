@@ -48,6 +48,10 @@ class LocalAutoRegisterProxyClient {
     return this.cgiRequest('GET', '/cgi-bin/magicBox.cgi?action=getDeviceType');
   }
 
+  async reboot() {
+    return this.cgiRequest('GET', '/cgi-bin/magicBox.cgi?action=reboot');
+  }
+
   async heartbeat() {
     try {
       const data = await this.getDeviceInfo();
@@ -151,6 +155,10 @@ class InternalAutoRegisterProxyClient {
     return this.cgiRequest('GET', '/cgi-bin/magicBox.cgi?action=getDeviceType');
   }
 
+  async reboot() {
+    return this.cgiRequest('GET', '/cgi-bin/magicBox.cgi?action=reboot');
+  }
+
   async heartbeat() {
     try {
       const data = await this.getDeviceInfo();
@@ -179,7 +187,7 @@ function buildCloudAutoRegisterClient(deviceId: string) {
 
 export type DeviceClientShape = Pick<
   IntelbrasClient,
-  'insertUsers' | 'insertFaces' | 'removeUser' | 'removeFace' | 'getDeviceInfo' | 'heartbeat' | 'downloadFile'
+  'insertUsers' | 'insertFaces' | 'removeUser' | 'removeFace' | 'getDeviceInfo' | 'heartbeat' | 'downloadFile' | 'reboot'
 >;
 
 export function getDeviceClient(device: {

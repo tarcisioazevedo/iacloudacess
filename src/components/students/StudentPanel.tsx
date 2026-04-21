@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserCheck, Settings, BookOpen, Clock, Activity, Edit3, Save, MessageSquare, Phone, Mail, UserPlus, AlertTriangle } from 'lucide-react';
+import { 
+  X, Image as ImageIcon, Camera, UserCheck, ShieldAlert,
+  Edit3, Save, Phone, Mail, BookOpen, Fingerprint, Lock,
+  AlertTriangle, UploadCloud, UserPlus, FileSearch, Trash2
+} from 'lucide-react';
 
 interface Guardian {
   id: string; name: string; phone: string; email: string;
@@ -86,6 +90,24 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ [field]: value })
     });
+  };
+
+  const handleRemoveGuardian = async (linkId: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este responsável do aluno?')) return;
+    try {
+      const res = await fetch(`/api/guardians/link/${linkId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setStudent(prev => prev ? { ...prev, guardianLinks: prev.guardianLinks?.filter(l => l.id !== linkId) } : prev);
+      } else {
+        const error = await res.json();
+        alert('Erro ao remover: ' + error.message);
+      }
+    } catch (err: any) {
+      alert('Erro inesperado: ' + err.message);
+    }
   };
 
   const handleCreateGuardian = async (e: React.FormEvent) => {
@@ -279,6 +301,12 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
                                 {link.guardian.email && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={12} /> {link.guardian.email}</span>}
                               </div>
                             </div>
+                            <button 
+                              onClick={() => handleRemoveGuardian(link.id)} 
+                              title="Remover Vínculo"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', padding: 6, borderRadius: 'var(--radius-sm)' }}>
+                              <Trash2 size={16} />
+                            </button>
                           </div>
                           
                           <div style={{ padding: '16px 20px', background: 'var(--color-bg-subtle)' }}>

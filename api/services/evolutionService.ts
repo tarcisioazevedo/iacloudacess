@@ -117,8 +117,8 @@ export async function connectEvolutionInstance(instanceName: string, phoneNumber
 
   return {
     pairingCode: data?.pairingCode ?? null,
-    qrCodePayload: data?.base64 ?? data?.qrcode ?? data?.code ?? null,
-    count: typeof data?.count === 'number' ? data.count : null,
+    qrCodePayload: typeof data?.qrcode === 'string' ? data.qrcode : (data?.qrcode?.base64 ?? data?.base64 ?? data?.code ?? null),
+    count: typeof data?.count === 'number' ? data.count : (data?.qrcode?.count ?? null),
     raw: data,
   };
 }

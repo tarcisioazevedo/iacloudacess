@@ -239,6 +239,10 @@ export class IntelbrasClient {
     return Buffer.from(response.data);
   }
 
+  async reboot() {
+    return this.request('GET', '/cgi-bin/magicBox.cgi?action=reboot');
+  }
+
   async heartbeat() {
     try {
       const data = await this.getDeviceInfo();

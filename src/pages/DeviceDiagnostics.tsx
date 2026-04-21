@@ -48,6 +48,52 @@ export default function DeviceDiagnostics() {
     }
   };
 
+  const handleReboot = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja aplicar um reboot de hardware na catraca remotamente?')) return;
+    
+    setPinging(true);
+    setPingResult('Enviando sinal de reinício (Reboot) para equipamento genérico...');
+    try {
+      const res = await fetch(`/api/diagnostics/device/${id}/reboot`, { 
+        method: 'POST', 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPingResult(`✅ Comando de Reinicialização (Reboot) despachado.`);
+      } else {
+        setPingResult(`❌ Falha no Reboot: ${data.message || data.error}`);
+      }
+    } catch (err: any) {
+      setPingResult(`❌ Erro Fatal no Envio: ${err.message}`);
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  const handleForceSync = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja enfileirar a sincronização total desta catraca? Isso pode consumir muita banda da rede local.')) return;
+    
+    setPinging(true);
+    setPingResult('Despachando ordem de sincronização massiva...');
+    try {
+      const res = await fetch(`/api/device-sync/${id}/sync-all`, { 
+        method: 'POST', 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPingResult(`✅ Sync Forçado: ${data.message} (${data.count} itens)`);
+      } else {
+        setPingResult(`❌ Falha no Sync: ${data.message || data.error}`);
+      }
+    } catch (err: any) {
+      setPingResult(`❌ Erro no Despacho: ${err.message}`);
+    } finally {
+      setPinging(false);
+    }
+  };
+
   if (profile?.role === 'school_admin' || profile?.role === 'school_operator') {
     return <div style={{ padding: 40, textAlign: 'center' }}>Acesso Restrito ao Suporte Técnico (Engenharia de Redes).</div>;
   }
@@ -106,12 +152,24 @@ export default function DeviceDiagnostics() {
                     <td style={{ padding: 12, textAlign: 'center' }}>
                       <span className="badge badge-success">ESTABLISHED</span>
                     </td>
-                    <td style={{ padding: 12, textAlign: 'right' }}>
+                    <td style={{ padding: 12, textAlign: 'right', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       <button 
                         disabled={pinging}
                         onClick={() => handlePing(device.id)}
                         style={{ padding: '6px 12px', background: '#000', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                        Medir Latência TCP (Ping)
+                        <Activity size={12} style={{ display: 'inline', marginRight: 4 }} /> Ping
+                      </button>
+                      <button 
+                        disabled={pinging}
+                        onClick={() => handleForceSync(device.id)}
+                        style={{ padding: '6px 12px', background: 'var(--color-primary-600)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                        <RefreshCw size={12} style={{ display: 'inline', marginRight: 4 }} /> Forçar Sync
+                      </button>
+                      <button 
+                        disabled={pinging}
+                        onClick={() => handleReboot(device.id)}
+                        style={{ padding: '6px 12px', background: 'var(--color-danger-500)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                        Reiniciar
                       </button>
                     </td>
                   </tr>

@@ -201,12 +201,18 @@ router.get('/messaging/whatsapp', requireRole('superadmin', 'integrator_admin', 
     try {
       const snapshot = await syncEvolutionInstance(channel.instanceName);
       if (snapshot) {
+        let connectData = null;
+        if (snapshot.connectionState === 'connecting' || (snapshot.connectionState === 'close' && channel.qrCodePayload)) {
+          connectData = await connectEvolutionInstance(channel.instanceName).catch(() => null);
+        }
+
         updatedChannel = await persistChannelState({
           school,
           actorId: req.user?.profileId,
           instanceName: channel.instanceName,
           channel,
           snapshot,
+          connect: connectData && connectData.qrCodePayload ? connectData : undefined,
         });
       }
     } catch (err) {

@@ -6,7 +6,7 @@ import {
   Shield, LayoutDashboard, Radio, Users, UserCheck, HardDrive,
   Clock, Bell, School, Building2, KeyRound, Menu, X, LogOut, Wifi, WifiOff,
   BarChart3, Gauge, Zap, Activity, ClipboardList, Bot, Brain, UserCog, Tv,
-  Settings, AlertTriangle, XCircle, MessageSquare,
+  Settings, AlertTriangle, XCircle, MessageSquare, Moon, Sun
 } from 'lucide-react';
 
 const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; path: string; roles: string[] }[]> = {
@@ -79,12 +79,19 @@ export default function AppShell() {
   const { isConnected } = useSocket();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const role = profile?.role || '';
   const billingBanner = useBillingBanner(profile, token);
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const toggleDarkMode = () => {
+    const isNowDark = document.documentElement.classList.toggle('dark');
+    setIsDark(isNowDark);
+    localStorage.setItem('theme', isNowDark ? 'dark' : 'light');
   };
 
   const linkStyle = (isActive: boolean): React.CSSProperties => ({
@@ -177,11 +184,9 @@ export default function AppShell() {
               <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile?.name}</div>
               <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{profile?.role?.replace('_', ' ')}</div>
             </div>
-            <button onClick={() => {
-                document.documentElement.classList.toggle('dark');
-              }} title="Alternar Tema"
+            <button onClick={toggleDarkMode} title="Alternar Tema"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>
-              <Zap size={16} />
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button onClick={handleLogout} title="Sair"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>
@@ -205,6 +210,10 @@ export default function AppShell() {
           </button>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-primary-800)' }}>Acesso Escolar</div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={toggleDarkMode} title="Alternar Tema"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text)', padding: 4 }}>
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
             {isConnected
               ? <span className="badge badge-success" style={{ fontSize: 11 }}>● Online</span>
               : <span className="badge badge-danger" style={{ fontSize: 11 }}>● Offline</span>

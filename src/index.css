@@ -205,6 +205,9 @@ select:focus:not(:focus-visible) {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+}
 
 /* ─── Status Badges ──────────────────────────── */
 .badge {
@@ -421,10 +424,16 @@ select:focus:not(:focus-visible) {
 }
 
 /* ─── Data Table ─────────────────────────────── */
+.data-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  min-width: 600px;
 }
 .data-table thead th {
   text-align: left;

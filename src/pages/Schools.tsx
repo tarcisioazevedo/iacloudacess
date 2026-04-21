@@ -159,6 +159,7 @@ export default function Schools() {
         <EmptyState icon="schools" title="Nenhuma escola encontrada" description="Tente ajustar os filtros ou cadastre uma nova escola." />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="data-table-wrapper">
           <table className="data-table">
             <thead>
               <tr>
@@ -205,7 +206,10 @@ export default function Schools() {
                   <td>{statusBadge(school.status)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-ghost btn-sm" title="Configuracoes" style={{ padding: 4 }}>
+                      <button className="btn btn-ghost btn-sm" title="Cockpit da Escola" style={{ padding: 4 }} onClick={() => navigate(`/cockpit?schoolId=${school.id}`)}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+                      </button>
+                      <button className="btn btn-ghost btn-sm" title="Configuracoes" style={{ padding: 4 }} onClick={() => window.alert('No futuro abrirá o Modal de Edição (Cores, Fuso Horário, etc.)')}>
                         <Settings size={14} />
                       </button>
                       <button
@@ -216,7 +220,7 @@ export default function Schools() {
                       >
                         <MessageSquare size={14} />
                       </button>
-                      <button className="btn btn-ghost btn-sm" title="TV Panel" style={{ padding: 4 }}>
+                      <button className="btn btn-ghost btn-sm" title="TV Panel" style={{ padding: 4 }} onClick={() => navigate(`/tv-panels?schoolId=${school.id}`)}>
                         <Tv size={14} />
                       </button>
                       <button className="btn btn-ghost btn-sm" title={school.allowPhotoNotifications ? "Bloquear Fotos WhatsApp" : "Liberar Fotos WhatsApp"} onClick={() => handleTogglePhoto(school.id, !!school.allowPhotoNotifications)} style={{ padding: 4, color: school.allowPhotoNotifications ? 'var(--color-success)' : 'inherit' }}>
@@ -228,6 +232,7 @@ export default function Schools() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
