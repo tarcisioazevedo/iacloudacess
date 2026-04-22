@@ -21,7 +21,7 @@ jobs:
             git pull origin main
             
             echo "Rebuilding required images..."
-            docker-compose -f docker-compose.yml build
+            docker build -t school-access-api:latest -f Dockerfile .
             
             echo "Deploying Docker Stack..."
             export $(grep -v '^#' .env | xargs) && docker stack deploy -c docker-stack.yml school --with-registry-auth
