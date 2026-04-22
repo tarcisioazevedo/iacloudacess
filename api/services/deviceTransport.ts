@@ -46,8 +46,9 @@ function isPolicy(value: string | null | undefined): value is DeviceConnectionPo
   return Boolean(value && DEVICE_CONNECTION_POLICIES.includes(value as DeviceConnectionPolicy));
 }
 
-export function getDeviceReverseId(device: Pick<DeviceTransportInput, 'id' | 'localIdentifier'>): string {
-  return device.localIdentifier?.trim() || device.id;
+export function getDeviceReverseId(device: { localIdentifier?: string | null; id: string }) {
+  const truncatedId = device.id.length >= 32 ? device.id.slice(0, 32) : device.id;
+  return device.localIdentifier?.trim() || truncatedId;
 }
 
 export function normalizeDeviceConnectionPolicy(
