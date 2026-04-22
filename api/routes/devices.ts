@@ -383,4 +383,30 @@ router.put('/:id', requireRole('integrator_admin', 'integrator_support', 'supera
   }
 });
 
+// DELETE /api/devices/:id
+router.delete('/:id', requireRole('integrator_admin', 'integrator_support', 'superadmin'), async (req: Request, res: Response) => {
+  try {
+    const existing = await prisma.device.findFirst({
+      where: {
+        id: req.params.id,
+        ...deviceTenantWhere(req.user),
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ message: 'Dispositivo não encontrado ou fora do escopo' });
+    }
+
+    if (existing.isVirtual) {
+      const { VirtualDeviceSimulator } = await import('../services/virtualDeviceSimulator');
+      VirtualDeviceSimulator.getInstance().stop(existing.id);
+    }
+
+    await prisma.device.delete({ where: { id: req.params.id } });
+    return res.json({ message: 'Dispositivo removido com sucesso' });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
 export default router;

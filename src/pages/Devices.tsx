@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users, Building2, GraduationCap, Filter, X } from 'lucide-react';
+import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users, Building2, GraduationCap, Filter, X, Trash2 } from 'lucide-react';
 
 interface EdgeConnectorSummary {
   id: string;
@@ -230,6 +230,23 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
       alert(err.message || 'Erro ao criar sync jobs');
     }
     setSyncing(null);
+  };
+
+  const handleRemoveDevice = async (deviceId: string, deviceName: string) => {
+    if (!window.confirm(`Tem certeza que deseja remover o dispositivo "${deviceName}"? Essa ação não pode ser desfeita e removerá também todos os logs atrelados ao dispositivo.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/devices/${deviceId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Erro ao remover dispositivo');
+      load();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao remover dispositivo');
+    }
   };
 
   const handleAddDevice = async (e: React.FormEvent) => {
@@ -775,6 +792,23 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
                 >
                   <RefreshCw size={14} className={syncing === device.id ? 'spinning' : ''} />
                   {syncing === device.id ? 'Sincronizando...' : 'Sincronizar'}
+                </button>
+                <button
+                  onClick={() => handleRemoveDevice(device.id, device.name)}
+                  style={{
+                    padding: '8px 12px',
+                    border: '1.5px solid var(--color-danger)',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'transparent',
+                    color: 'var(--color-danger)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title="Remover Dispositivo"
+                >
+                  <Trash2 size={14} />
                 </button>
               </div>
             </div>
