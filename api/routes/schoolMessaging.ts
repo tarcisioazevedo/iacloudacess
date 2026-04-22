@@ -403,15 +403,16 @@ router.post('/messaging/whatsapp/test-message', requireRole('superadmin', 'integ
     const message = String(req.body?.message || '').trim()
       || `Teste do canal oficial da escola ${school.name}. Se esta mensagem chegou, a instancia ${channel.instanceName} esta operacional.`;
 
-    await sendEvolutionText(channel.instanceName, phoneNumber, message);
+    const evolutionResult = await sendEvolutionText(channel.instanceName, phoneNumber, message);
 
     await auditLog(req, school, 'school.messaging.test_sent', {
       schoolId: school.id,
       instanceName: channel.instanceName,
       phoneNumber,
+      evolutionResult,
     });
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, debug: evolutionResult });
   } catch (err) {
     return res.status(500).json({ message: getErrorMessage(err) });
   }

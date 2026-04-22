@@ -130,6 +130,7 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
   const [instanceName, setInstanceName] = useState('');
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('');
+  const [debugOutput, setDebugOutput] = useState<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const role = profile?.role || '';
@@ -346,14 +347,19 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
       toast.warning('Informe um numero para o teste');
       return;
     }
+    setDebugOutput(null);
     try {
-      await executeAction('/messaging/whatsapp/test-message', {
+      const payload = await executeAction('/messaging/whatsapp/test-message', {
         phoneNumber: testPhone,
         message: testMessage,
       });
+      if (payload.debug) {
+        setDebugOutput(payload.debug);
+      }
       toast.success('Mensagem de teste enviada');
     } catch (err: any) {
       toast.error(err.message || 'Falha ao enviar a mensagem de teste');
+      setDebugOutput({ error: err.message, stack: err.stack });
     }
   };
 
@@ -681,6 +687,18 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
                 <div><strong>Numero atual:</strong> {data.channel?.phoneNumber || 'Nao conectado'}</div>
                 <div><strong>Ultima conexao:</strong> {formatDateTime(data.channel?.lastConnectedAt)}</div>
               </div>
+
+              {debugOutput && (
+                <div style={{ marginTop: 14, padding: 12, background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                    Logs de Envio (Debug API)
+                    <button onClick={() => setDebugOutput(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
+                  </div>
+                  <pre style={{ margin: 0, fontSize: 11, color: 'var(--color-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflowY: 'auto' }}>
+                    {JSON.stringify(debugOutput, null, 2)}
+                  </pre>
+                </div>
+              )}
             </section>
           </div>
         </>
