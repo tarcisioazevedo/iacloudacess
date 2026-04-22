@@ -380,7 +380,7 @@ export async function startDeviceHealthChecker() {
 
     // Process AutoRegister Cloud Devices
     const autoRegDevices = await prisma.device.findMany({
-      where: { connectivityMode: 'cloud_autoregister' },
+      where: { connectionPolicy: 'cloud_autoreg_only' },
       select: { id: true, status: true }
     });
 
@@ -399,7 +399,7 @@ export async function startDeviceHealthChecker() {
     await prisma.device.updateMany({
       where: {
         status: 'online',
-        connectivityMode: { not: 'cloud_autoregister' },
+        connectionPolicy: { not: 'cloud_autoreg_only' },
         OR: [{ lastHeartbeat: { lt: fiveMinutesAgo } }, { lastHeartbeat: null }],
       },
       data: { status: 'unstable' },
@@ -408,7 +408,7 @@ export async function startDeviceHealthChecker() {
     await prisma.device.updateMany({
       where: {
         status: { in: ['online', 'unstable'] },
-        connectivityMode: { not: 'cloud_autoregister' },
+        connectionPolicy: { not: 'cloud_autoreg_only' },
         OR: [{ lastHeartbeat: { lt: thirtyMinutesAgo } }, { lastHeartbeat: null }],
       },
       data: { status: 'offline' },
