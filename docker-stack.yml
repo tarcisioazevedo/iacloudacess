@@ -140,8 +140,8 @@ services:
       MIN_POOL_SIZE: "5"
       RESERVE_POOL_SIZE: "5"
       RESERVE_POOL_TIMEOUT: "3"
-      # Prisma utilizes the md5 hash mechanism perfectly over pgbouncer pool mode
-      AUTH_TYPE: md5
+      # Postgres 14+ uses scram-sha-256 by default. Prisma connects using scram-sha-256.
+      AUTH_TYPE: scram-sha-256
       IGNORE_STARTUP_PARAMETERS: extra_float_digits
       SERVER_RESET_QUERY: ""
       SERVER_IDLE_TIMEOUT: "600"
