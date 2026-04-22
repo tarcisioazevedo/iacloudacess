@@ -44,8 +44,25 @@ export default function Schools() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', cnpj: '' });
+  const [createForm, setCreateForm] = useState({ name: '', cnpj: '', integratorId: '' });
   const [creating, setCreating] = useState(false);
+  const [integrators, setIntegrators] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (profile?.role === 'superadmin' && !isDemo) {
+      fetch('/api/integrators', { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => res.json())
+        .then(data => {
+          if (data.integrators) {
+            setIntegrators(data.integrators);
+            if (data.integrators.length > 0) {
+              setCreateForm(prev => ({ ...prev, integratorId: data.integrators[0].id }));
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [profile?.role, isDemo, token]);
 
   const handleOpenConfig = (school: SchoolItem) => {
     navigate(`/school-hub?schoolId=${school.id}`);
@@ -59,6 +76,11 @@ export default function Schools() {
       return;
     }
     
+    if (profile?.role === 'superadmin' && !createForm.integratorId) {
+      alert('Selecione um integrador para vincular à escola.');
+      return;
+    }
+    
     setCreating(true);
     try {
       const res = await fetch('/api/schools', {
@@ -66,7 +88,10 @@ export default function Schools() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(createForm),
       });
-      if (!res.ok) throw new Error('Falha ao criar escola');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || 'Falha ao criar escola');
+      }
       const data = await res.json();
       setShowCreate(false);
       navigate(`/school-hub?schoolId=${data.school?.id || data.id}`);
@@ -286,6 +311,21 @@ export default function Schools() {
                 <label className="form-label">CNPJ</label>
                 <input type="text" className="form-input" value={createForm.cnpj} onChange={e => setCreateForm({ ...createForm, cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
               </div>
+              {profile?.role === 'superadmin' && integrators.length > 0 && (
+                <div>
+                  <label className="form-label">Integrador Vinculado *</label>
+                  <select 
+                    className="form-input" 
+                    value={createForm.integratorId} 
+                    onChange={e => setCreateForm({ ...createForm, integratorId: e.target.value })}
+                    required
+                  >
+                    {integrators.map(intg => (
+                      <option key={intg.id} value={intg.id}>{intg.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <button type="button" className="btn btn-neutral" style={{ flex: 1 }} onClick={() => !creating && setShowCreate(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={creating || !createForm.name}>
