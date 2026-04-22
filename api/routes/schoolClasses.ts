@@ -45,7 +45,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/school-classes
-router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
+router.post('/', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     const { schoolId, grade, classGroup, shift } = req.body;
     const targetSchoolId = schoolId || req.user?.schoolId;
@@ -83,7 +83,7 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin', '
 });
 
 // DELETE /api/school-classes/:id
-router.delete('/:id', requireRole('school_admin', 'integrator_admin', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
+router.delete('/:id', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.schoolClass.findFirst({
       where: { id: req.params.id, ...schoolClassTenantWhere(req.user) },

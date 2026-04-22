@@ -42,6 +42,34 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
   const [showAddGuardian, setShowAddGuardian] = useState(false);
   const [newGuardianForm, setNewGuardianForm] = useState({ name: '', phone: '', email: '', relation: 'Pai', relationCustom: '' });
 
+  // Edit Guardian View
+  const [editingGuardianId, setEditingGuardianId] = useState<string | null>(null);
+  const [editGuardianForm, setEditGuardianForm] = useState({ name: '', phone: '', email: '' });
+
+  const startEditGuardian = (guardian: Guardian) => {
+    setEditingGuardianId(guardian.id);
+    setEditGuardianForm({ name: guardian.name, phone: guardian.phone || '', email: guardian.email || '' });
+  };
+
+  const cancelEditGuardian = () => {
+    setEditingGuardianId(null);
+  };
+
+  const handleUpdateGuardian = async (guardianId: string) => {
+    const res = await fetch(`/api/guardians/${guardianId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(editGuardianForm)
+    });
+    if (res.ok) {
+      setEditingGuardianId(null);
+      load();
+    } else {
+      const err = await res.json();
+      alert(err.message || 'Erro ao atualizar responsável');
+    }
+  };
+
   const load = () => {
     setLoading(true);
     fetch(`/api/students/${studentId}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -293,20 +321,48 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
                           <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--color-bg-subtle)' }}>
                             <div>
                               <div style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                {link.guardian.name}
+                                {editingGuardianId === link.guardian.id ? (
+                                  <input 
+                                    value={editGuardianForm.name} 
+                                    onChange={e => setEditGuardianForm({...editGuardianForm, name: e.target.value})} 
+                                    style={{ padding: '4px 8px', fontSize: 14, borderRadius: 4, border: '1px solid var(--color-border)' }} 
+                                  />
+                                ) : (
+                                  link.guardian.name
+                                )}
                                 <span className="badge badge-neutral" style={{ fontSize: 10 }}>{link.relation}</span>
                               </div>
                               <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                                {link.guardian.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={12} /> {link.guardian.phone}</span>}
-                                {link.guardian.email && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={12} /> {link.guardian.email}</span>}
+                                {editingGuardianId === link.guardian.id ? (
+                                  <>
+                                    <input placeholder="Telefone" value={editGuardianForm.phone} onChange={e => setEditGuardianForm({...editGuardianForm, phone: e.target.value})} style={{ padding: '2px 6px', fontSize: 12, width: 100 }} />
+                                    <input placeholder="E-mail" value={editGuardianForm.email} onChange={e => setEditGuardianForm({...editGuardianForm, email: e.target.value})} style={{ padding: '2px 6px', fontSize: 12, width: 140 }} />
+                                  </>
+                                ) : (
+                                  <>
+                                    {link.guardian.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={12} /> {link.guardian.phone}</span>}
+                                    {link.guardian.email && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={12} /> {link.guardian.email}</span>}
+                                  </>
+                                )}
                               </div>
                             </div>
-                            <button 
-                              onClick={() => handleRemoveGuardian(link.id)} 
-                              title="Remover Vínculo"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', padding: 6, borderRadius: 'var(--radius-sm)' }}>
-                              <Trash2 size={16} />
-                            </button>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {editingGuardianId === link.guardian.id ? (
+                                <>
+                                  <button onClick={cancelEditGuardian} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 6, fontSize: 11, fontWeight: 600 }}>Cancelar</button>
+                                  <button onClick={() => handleUpdateGuardian(link.guardian.id)} style={{ background: 'var(--color-primary-50)', color: 'var(--color-primary-700)', border: '1px solid var(--color-primary-200)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', padding: '4px 8px', fontSize: 11, fontWeight: 600 }}>Salvar</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => startEditGuardian(link.guardian)} title="Editar Responsável" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary-600)', padding: 6, borderRadius: 'var(--radius-sm)' }}>
+                                    <Edit3 size={16} />
+                                  </button>
+                                  <button onClick={() => handleRemoveGuardian(link.id)} title="Remover Vínculo" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', padding: 6, borderRadius: 'var(--radius-sm)' }}>
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
                           
                           <div style={{ padding: '16px 20px', background: 'var(--color-bg-subtle)' }}>

@@ -32,7 +32,7 @@ router.get('/', async (req: Request, res: Response) => {
 // ─── POST /api/guardians — create guardian ───────────────────────────────────
 // Guardians are tenant-agnostic (shared entity), but they MUST be linked to a
 // student on creation to establish the tenant chain. Otherwise they'd be orphaned.
-router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
+router.post('/', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     const { name, phone, email, studentId, relation } = req.body;
 
@@ -85,7 +85,7 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), 
 
 // ─── POST /api/guardians/:id/link — link guardian to student ─────────────────
 // CRITICAL: validate that the studentId belongs to caller's tenant.
-router.post('/:id/link', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
+router.post('/:id/link', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     const { studentId, relation, priority, notifyEntry, notifyExit, whatsappOn, emailOn } = req.body;
 
@@ -152,7 +152,7 @@ router.post('/:id/link', requireRole('school_admin', 'integrator_admin', 'supera
 
 // ─── PUT /api/guardians/:id — update guardian info ───────────────────────────
 // Validate guardian is in caller's tenant scope before allowing edits.
-router.put('/:id', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
+router.put('/:id', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     const { name, phone, email } = req.body;
 
@@ -183,7 +183,7 @@ router.put('/:id', requireRole('school_admin', 'integrator_admin', 'superadmin')
 
 // ─── PUT /api/guardians/link/:linkId — update notification preferences ───────
 // Validate link's student is in caller's tenant scope.
-router.put('/link/:linkId', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
+router.put('/link/:linkId', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     const { relation, priority, notifyEntry, notifyExit, whatsappOn, emailOn, allowPhoto } = req.body;
 
@@ -221,7 +221,7 @@ router.put('/link/:linkId', requireRole('school_admin', 'integrator_admin', 'sup
 });
 
 // ─── DELETE /api/guardians/link/:linkId — remove student-guardian link ────────
-router.delete('/link/:linkId', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
+router.delete('/link/:linkId', requireRole('school_admin', 'integrator_admin', 'integrator_support', 'superadmin', 'coordinator'), async (req: Request, res: Response) => {
   try {
     // ─── TENANT ENFORCEMENT ──────────────────────────────────────────────
     const link = await prisma.studentGuardian.findFirst({
