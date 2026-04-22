@@ -49,8 +49,31 @@ export async function persistAccessEvent(input: PersistAccessEventInput) {
 
     if (link) {
       studentId = link.studentId;
-    } else if (input.status === 'granted') {
-      finalStatus = 'pending_link';
+    } else {
+      // Fallback: Tenta achar o aluno cuja matrícula seja igual ao userIdRaw recebido do dispositivo
+      const studentByEnrollment = await prisma.student.findFirst({
+        where: { 
+          schoolId: input.schoolId, 
+          enrollment: String(input.userIdRaw) 
+        }
+      });
+      
+      if (studentByEnrollment) {
+        studentId = studentByEnrollment.id;
+        
+        // Opcional: auto-vincular para futuras leituras ficarem mais rápidas
+        await prisma.deviceStudentLink.create({
+          data: {
+            deviceId: input.deviceId,
+            studentId: studentByEnrollment.id,
+            userId: String(input.userIdRaw),
+            syncStatus: 'synced'
+          }
+        }).catch(() => {}); // ignore duplicates
+        
+      } else if (input.status === 'granted') {
+        finalStatus = 'pending_link';
+      }
     }
   }
 
