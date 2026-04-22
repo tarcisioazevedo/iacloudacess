@@ -381,11 +381,12 @@ export async function startDeviceHealthChecker() {
     // Process AutoRegister Cloud Devices
     const autoRegDevices = await prisma.device.findMany({
       where: { connectionPolicy: 'cloud_autoreg_only' },
-      select: { id: true, status: true }
+      select: { id: true, status: true, localIdentifier: true }
     });
 
     for (const dev of autoRegDevices) {
-      const isConnected = autoRegisterPresenceService.hasSession(dev.id);
+      const reverseId = dev.localIdentifier?.trim() || dev.id;
+      const isConnected = autoRegisterPresenceService.hasSession(reverseId);
       const targetStatus = isConnected ? 'online' : 'offline';
       if (dev.status !== targetStatus) {
         await prisma.device.update({
