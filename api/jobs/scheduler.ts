@@ -385,8 +385,9 @@ export async function startDeviceHealthChecker() {
     });
 
     for (const dev of autoRegDevices) {
-      const reverseId = dev.localIdentifier?.trim() || dev.id;
-      const isConnected = autoRegisterPresenceService.hasSession(reverseId);
+      const truncatedId = dev.id.length >= 32 ? dev.id.slice(0, 32) : dev.id;
+      const reverseId = dev.localIdentifier?.trim() || truncatedId;
+      const isConnected = autoRegisterPresenceService.hasSession(reverseId) || autoRegisterPresenceService.hasSession(dev.id);
       const targetStatus = isConnected ? 'online' : 'offline';
       if (dev.status !== targetStatus) {
         await prisma.device.update({
