@@ -353,9 +353,7 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
         phoneNumber: testPhone,
         message: testMessage,
       });
-      if (payload.debug) {
-        setDebugOutput(payload.debug);
-      }
+      setDebugOutput(payload.debug || { _warning: "Backend API desatualizada (nao retornou debug)", rawPayload: payload });
       toast.success('Mensagem de teste enviada');
     } catch (err: any) {
       toast.error(err.message || 'Falha ao enviar a mensagem de teste');
