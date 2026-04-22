@@ -106,6 +106,16 @@ router.post(
         const link = device.studentLinks[Math.floor(Math.random() * device.studentLinks.length)];
         resolvedStudentId = link.studentId;
         userIdRaw = link.userId;
+      } else if (!resolvedStudentId && device.studentLinks.length === 0) {
+        // Fallback para pegar qualquer aluno da escola (útil para testes rápidos com Dispositivo Virtual novo)
+        const randomStudent = await prisma.student.findFirst({
+          where: { schoolId },
+          orderBy: { createdAt: 'desc' }
+        });
+        if (randomStudent) {
+          resolvedStudentId = randomStudent.id;
+          userIdRaw = randomStudent.enrollment || `MANUAL-${Date.now()}`;
+        }
       }
 
       const crypto = await import('crypto');
