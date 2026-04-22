@@ -303,7 +303,8 @@ router.post('/import-csv',
         });
       }
 
-      // Parse rows
+      // Track classes to avoid redundant upserts
+      const registeredClasses = new Set<string>();
       const results = { created: 0, updated: 0, errors: [] as { line: number; error: string }[] };
 
       for (let i = 1; i < lines.length; i++) {
@@ -317,6 +318,33 @@ router.post('/import-csv',
         }
 
         try {
+          const gradeValue = colMap.grade !== undefined ? cols[colMap.grade] || 'Sem Série' : 'Sem Série';
+          const classGroupValue = colMap.classGroup !== undefined ? cols[colMap.classGroup] || 'Sem Turma' : 'Sem Turma';
+          const shiftValue = colMap.shift !== undefined ? cols[colMap.shift] || 'manhã' : 'manhã';
+
+          // Auto-feed the SchoolClass catalog
+          const classKey = `${gradeValue}|${classGroupValue}|${shiftValue}`.toLowerCase();
+          if (!registeredClasses.has(classKey)) {
+            registeredClasses.add(classKey);
+            await prisma.schoolClass.upsert({
+              where: {
+                schoolId_grade_classGroup_shift: {
+                  schoolId,
+                  grade: gradeValue,
+                  classGroup: classGroupValue,
+                  shift: shiftValue.toLowerCase(),
+                }
+              },
+              update: {},
+              create: {
+                schoolId,
+                grade: gradeValue,
+                classGroup: classGroupValue,
+                shift: shiftValue.toLowerCase(),
+              }
+            }).catch(() => { /* ignore dups if perfectly concurrent */ });
+          }
+
           const existing = await prisma.student.findFirst({
             where: { schoolId, enrollment },
           });
@@ -324,9 +352,9 @@ router.post('/import-csv',
           const data = {
             name,
             enrollment,
-            grade: colMap.grade !== undefined ? cols[colMap.grade] || '' : '',
-            classGroup: colMap.classGroup !== undefined ? cols[colMap.classGroup] || '' : '',
-            shift: colMap.shift !== undefined ? cols[colMap.shift] || 'manhã' : 'manhã',
+            grade: gradeValue,
+            classGroup: classGroupValue,
+            shift: shiftValue.toLowerCase(),
             schoolId,
             status: 'active' as const,
           };

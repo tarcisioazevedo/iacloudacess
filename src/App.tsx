@@ -31,6 +31,7 @@ const TVPanelManagement = lazy(() => import('./pages/TVPanelManagement'));
 const PartnerManagement = lazy(() => import('./pages/PartnerManagement'));
 const PlatformSettings = lazy(() => import('./pages/PlatformSettings'));
 const SchoolWhatsApp = lazy(() => import('./pages/SchoolWhatsApp'));
+const SchoolHub = lazy(() => import('./pages/SchoolHub/index'));
 
 function RouteLoader() {
   return (
@@ -89,6 +90,7 @@ export default function App() {
                   <Route index element={<Navigate to="/dashboard" replace />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="live-feed" element={<LiveFeed />} />
+                  <Route path="school-hub" element={<SchoolHub />} />
                   <Route path="students" element={<Students />} />
                   <Route path="devices" element={<Devices />} />
                   <Route

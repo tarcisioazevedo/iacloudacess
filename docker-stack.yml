@@ -108,7 +108,7 @@ services:
           cpus: "0.25"
           memory: 256M
       restart_policy:
-        condition: any
+        condition: on-failure
         delay: 5s
         max_attempts: 10
     healthcheck:
@@ -130,10 +130,10 @@ services:
   # by only ~20 actual Postgres connections instead of 25+, leaving plenty of
   # headroom for evolution-api, n8n, and operational queries.
   pgbouncer:
-    # edoburu/pgbouncer aceita DATABASE_URL diretamente — sem pgbouncer.ini manual
+    # edoburu/pgbouncer aceita DATABASE_URL diretamente
     image: edoburu/pgbouncer:latest
+    entrypoint: /bin/sh -c "export DATABASE_URL=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/$${DB_NAME:-school_access}\" && exec /entrypoint.sh pgbouncer"
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:-schoolpass2026}@postgres:5432/school_access
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
       DEFAULT_POOL_SIZE: "20"
@@ -160,7 +160,7 @@ services:
           cpus: "0.05"
           memory: 16M
       restart_policy:
-        condition: any
+        condition: on-failure
         delay: 5s
         max_attempts: 10
     healthcheck:
@@ -169,6 +169,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    secrets:
+      - db_password
 
   # ─── Redis ──────────────────────────────────
   redis:
@@ -196,7 +198,7 @@ services:
           cpus: "0.10"
           memory: 64M
       restart_policy:
-        condition: any
+        condition: on-failure
         delay: 3s
         max_attempts: 10
     healthcheck:
@@ -532,6 +534,7 @@ services:
   # ─── Evolution API (WhatsApp) ───────────────
   evolution-api:
     image: atendai/evolution-api:v2.2.3
+    entrypoint: /bin/bash -c "export DATABASE_CONNECTION_URI=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/evolution\" && export DATABASE_URL=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/evolution\" && . ./Docker/scripts/deploy_database.sh && exec npm run start:prod"
     environment:
       - SERVER_URL=https://evolution.${DOMAIN:-localhost}
       - CORS_ORIGIN=*
@@ -549,9 +552,6 @@ services:
       - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN:-global-secret-token}
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:-schoolpass2026}@postgres:5432/evolution
-      # DATABASE_URL = alias para Prisma interno da Evolution API (v2 lê ambas as variáveis)
-      - DATABASE_URL=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:-schoolpass2026}@postgres:5432/evolution
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
       # Fix for WhatsApp Baileys Web Socket closed error (count: 0 on QR Code)
       - CONFIG_SESSION_PHONE_VERSION=2.3000.1034074495
@@ -586,6 +586,8 @@ services:
       timeout: 10s
       start_period: 120s
       retries: 5
+    secrets:
+      - db_password
 
   # ─── N8N (Visual Automation Engine) ───────────
   n8n:
@@ -603,7 +605,7 @@ services:
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_USER=${DB_USER:-schooladmin}
-      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:-schoolpass2026}
+      - DB_POSTGRESDB_PASSWORD_FILE=/run/secrets/db_password
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
@@ -626,6 +628,8 @@ services:
         - "traefik.http.routers.n8n.rule=Host(`n8n.${DOMAIN:-localhost}`)"
         - "traefik.http.routers.n8n.entrypoints=websecure"
         - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+    secrets:
+      - db_password
 
 # ─── Networks ─────────────────────────────────
 networks:

@@ -39,6 +39,8 @@ services:
       MIGRATE_ON_START: "true"
     ports:
       - "4000:4000"
+    deploy:
+      replicas: 1
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,6 +129,8 @@ services:
     image: school-access-frontend:dev
     ports:
       - "3000:80"
+    deploy:
+      replicas: 1
     depends_on:
       api:
         condition: service_started
@@ -137,8 +141,6 @@ services:
 
   evolution-api:
     image: atendai/evolution-api:v2.2.3
-    profiles:
-      - automation
     environment:
       - SERVER_URL=http://localhost:8080
       - CORS_ORIGIN=*
@@ -176,8 +178,6 @@ services:
       - "8080:8080"
 
   n8n:
-    profiles:
-      - automation
     ports:
       - "5678:5678"
 
@@ -193,12 +193,16 @@ networks:
 secrets:
   db_password:
     file: ./secrets/db_password.txt
+    external: false
   jwt_secret:
     file: ./secrets/jwt_secret.txt
+    external: false
   jwt_refresh_secret:
     file: ./secrets/jwt_refresh_secret.txt
+    external: false
   minio_secret_key:
     file: ./secrets/minio_secret_key.txt
+    external: false
 
 volumes:
   evolution_instances:

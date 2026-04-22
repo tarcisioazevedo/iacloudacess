@@ -43,47 +43,39 @@ export default function Schools() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-
-  // Slide-over Modal States
-  const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'geral' | 'devices' | 'profiles'>('geral');
-  const [modalDevices, setModalDevices] = useState<any[]>([]);
-  const [modalProfiles, setModalProfiles] = useState<any[]>([]);
-  const [modalLoading, setModalLoading] = useState(false);
-
-  useEffect(() => { loadData(); }, []);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', cnpj: '' });
+  const [creating, setCreating] = useState(false);
 
   const handleOpenConfig = (school: SchoolItem) => {
-    setSelectedSchool(school);
-    setActiveTab('geral');
-    setModalDevices([]);
-    setModalProfiles([]);
+    navigate(`/school-hub?schoolId=${school.id}`);
   };
 
-  useEffect(() => {
-    if (!selectedSchool || activeTab === 'geral' || isDemo) return;
-    
-    let isMounted = true;
-    setModalLoading(true);
-
-    const headers = { Authorization: `Bearer ${token}` };
-    
-    if (activeTab === 'devices') {
-      fetch(`/api/devices?schoolId=${selectedSchool.id}`, { headers })
-        .then(res => res.json())
-        .then(data => { if (isMounted) setModalDevices(data.devices || []); })
-        .catch(() => {})
-        .finally(() => { if (isMounted) setModalLoading(false); });
-    } else if (activeTab === 'profiles') {
-      fetch(`/api/profiles?schoolId=${selectedSchool.id}`, { headers })
-        .then(res => res.json())
-        .then(data => { if (isMounted) setModalProfiles(data.profiles || []); })
-        .catch(() => {})
-        .finally(() => { if (isMounted) setModalLoading(false); });
+  const handleCreateSchool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isDemo) {
+      setShowCreate(false);
+      navigate(`/school-hub?schoolId=new-demo`);
+      return;
     }
-
-    return () => { isMounted = false; };
-  }, [selectedSchool, activeTab, isDemo, token]);
+    
+    setCreating(true);
+    try {
+      const res = await fetch('/api/schools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(createForm),
+      });
+      if (!res.ok) throw new Error('Falha ao criar escola');
+      const data = await res.json();
+      setShowCreate(false);
+      navigate(`/school-hub?schoolId=${data.school?.id || data.id}`);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao criar escola');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -167,7 +159,7 @@ export default function Schools() {
             Gestao de escolas do portfolio • {schools.filter(item => item.status === 'active').length} ativas
           </p>
         </div>
-        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }} onClick={() => setShowCreate(true)}>
           <Plus size={14} /> Nova Escola
         </button>
       </div>
@@ -249,7 +241,7 @@ export default function Schools() {
                       <button className="btn btn-ghost btn-sm" title="Cockpit da Escola" style={{ padding: 4 }} onClick={() => navigate(`/cockpit?schoolId=${school.id}`)}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
                       </button>
-                      <button className="btn btn-ghost btn-sm" title="Configuracoes" style={{ padding: 4 }} onClick={() => handleOpenConfig(school)}>
+                      <button className="btn btn-ghost btn-sm" title="Secretaria Acadêmica" style={{ padding: 4 }} onClick={() => navigate(`/school-hub?schoolId=${school.id}`)}>
                         <Settings size={14} />
                       </button>
                       <button
@@ -276,152 +268,35 @@ export default function Schools() {
         </div>
       )}
 
-      {selectedSchool && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex' }}>
-          <div 
-            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }} 
-            onClick={() => setSelectedSchool(null)} 
-          />
-          <div className="animate-fade-in-up" style={{ 
-            position: 'absolute', right: 0, top: 0, bottom: 0, width: '100%', maxWidth: 640, 
-            backgroundColor: 'var(--color-surface)', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden'
-          }}>
-            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)' }}>
+      {/* Modal de Nova Escola (Minimalista) */}
+      {showCreate && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} onClick={() => !creating && setShowCreate(false)} />
+          <div className="card animate-fade-in-up" style={{ position: 'relative', width: '100%', maxWidth: 400, backgroundColor: 'var(--color-surface)', padding: 24, zIndex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Nova Escola</h3>
+              <button className="btn btn-ghost" style={{ padding: 4 }} onClick={() => !creating && setShowCreate(false)}><X size={16} /></button>
+            </div>
+            <form onSubmit={handleCreateSchool} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Configurações da Escola</h2>
-                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>{selectedSchool.name}</p>
+                <label className="form-label">Nome da Escola *</label>
+                <input required type="text" className="form-input" value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Ex: Colégio Anglo" />
               </div>
-              <button 
-                onClick={() => setSelectedSchool(null)}
-                style={{ background: 'var(--color-surface-2)', border: 'none', padding: 8, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <X size={18} color="var(--color-text-primary)" />
-              </button>
-            </div>
-
-            <div style={{ padding: '0 32px', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: 24 }}>
-              <button 
-                onClick={() => setActiveTab('geral')}
-                style={{ background: 'transparent', border: 'none', borderBottom: activeTab === 'geral' ? '2px solid var(--color-primary-600)' : '2px solid transparent', padding: '16px 0', fontSize: 14, fontWeight: activeTab === 'geral' ? 700 : 500, color: activeTab === 'geral' ? 'var(--color-primary-600)' : 'var(--color-text-secondary)', cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', transition: 'all 0.2s' }}
-              >
-                <Settings size={16} /> Geral
-              </button>
-              <button 
-                onClick={() => setActiveTab('devices')}
-                style={{ background: 'transparent', border: 'none', borderBottom: activeTab === 'devices' ? '2px solid var(--color-primary-600)' : '2px solid transparent', padding: '16px 0', fontSize: 14, fontWeight: activeTab === 'devices' ? 700 : 500, color: activeTab === 'devices' ? 'var(--color-primary-600)' : 'var(--color-text-secondary)', cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', transition: 'all 0.2s' }}
-              >
-                <HardDrive size={16} /> Equipamentos
-              </button>
-              <button 
-                onClick={() => setActiveTab('profiles')}
-                style={{ background: 'transparent', border: 'none', borderBottom: activeTab === 'profiles' ? '2px solid var(--color-primary-600)' : '2px solid transparent', padding: '16px 0', fontSize: 14, fontWeight: activeTab === 'profiles' ? 700 : 500, color: activeTab === 'profiles' ? 'var(--color-primary-600)' : 'var(--color-text-secondary)', cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', transition: 'all 0.2s' }}
-              >
-                <Shield size={16} /> Usuários Administrativos
-              </button>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: 32, backgroundColor: 'var(--color-surface-2)' }}>
-              {activeTab === 'geral' && (
-                <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <div className="card" style={{ padding: 24 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Identidade</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <div>
-                        <label className="form-label">Nome da Escola</label>
-                        <input type="text" className="form-input" value={selectedSchool.name} disabled />
-                      </div>
-                      <div>
-                        <label className="form-label">CNPJ</label>
-                        <input type="text" className="form-input" value={selectedSchool.cnpj || 'Não informado'} disabled />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="card" style={{ padding: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <MessageSquare size={16} />
-                        Notificações de Foto
-                      </h3>
-                      <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
-                        Permite o envio das fotos do momento do acesso via WhatsApp caso a integração esteja ativa.
-                      </p>
-                    </div>
-                    <div>
-                      <button 
-                        className={`btn ${selectedSchool.allowPhotoNotifications ? 'btn-success' : 'btn-ghost'}`} 
-                        onClick={() => handleTogglePhoto(selectedSchool.id, !!selectedSchool.allowPhotoNotifications)}
-                      >
-                        {selectedSchool.allowPhotoNotifications ? 'Ativado' : 'Ativar'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'devices' && (
-                <div className="animate-fade-in-up">
-                  {modalLoading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
-                  ) : modalDevices.length === 0 ? (
-                    <EmptyState icon="devices" title="Nenhum dispositivo encontrado" description="Esta escola ainda não possui equipamentos configurados." />
-                  ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 16 }}>
-                      {modalDevices.map(d => (
-                        <div key={d.id} className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700 }}>{d.name}</div>
-                              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{d.ipAddress}</div>
-                            </div>
-                            {d.status === 'online' ? <Wifi size={14} color="var(--color-success)" /> : <WifiOff size={14} color="var(--color-danger)" />}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                            <MapPin size={12} /> {d.location || 'Sem local'}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                            <HardDrive size={12} /> {d.model || 'Desconhecido'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'profiles' && (
-                <div className="animate-fade-in-up">
-                  {modalLoading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
-                  ) : modalProfiles.length === 0 ? (
-                    <EmptyState icon="users" title="Nenhum usuário encontrado" description="Sem usuários administrativos cadastrados unicamente para esta escola." />
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {modalProfiles.map(p => (
-                        <div key={p.id} className="card" style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: 'var(--color-primary-100)', color: 'var(--color-primary-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
-                              {p.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name}</div>
-                              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{p.email}</div>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                            <span className="badge" style={{ background: 'var(--color-surface-2)' }}>{p.role}</span>
-                            {!p.isActive && <span className="badge badge-danger">Inativo</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+              <div>
+                <label className="form-label">CNPJ</label>
+                <input type="text" className="form-input" value={createForm.cnpj} onChange={e => setCreateForm({ ...createForm, cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button type="button" className="btn btn-neutral" style={{ flex: 1 }} onClick={() => !creating && setShowCreate(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={creating || !createForm.name}>
+                  {creating ? 'Criando...' : 'Criar Escola'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
+
     </div>
   );
 }

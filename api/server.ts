@@ -28,6 +28,7 @@ import tvPanelRoutes from './routes/tvPanel';
 import schoolsRoutes from './routes/schools';
 import integratorsRoutes from './routes/integrators';
 import notificationsRoutes from './routes/notifications';
+import schoolClassesRoutes from './routes/schoolClasses';
 import licensesRoutes from './routes/licenses';
 import aiRoutes from './routes/ai';
 import { initStorage } from './services/storageService';
@@ -357,6 +358,7 @@ if (!IS_AUTOREG_GATEWAY) {
   app.use('/api/analytics', apiRateLimiter, analyticsRoutes);
   app.use('/api/school-units', apiRateLimiter, schoolUnitsRoutes);
   app.use('/api/schools', apiRateLimiter, schoolsRoutes);
+  app.use('/api/school-classes', apiRateLimiter, schoolClassesRoutes);
   app.use('/api/integrators', apiRateLimiter, integratorsRoutes);
   app.use('/api/notifications', apiRateLimiter, notificationsRoutes);
   app.use('/api/licenses', apiRateLimiter, licensesRoutes);

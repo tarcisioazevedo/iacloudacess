@@ -16,8 +16,8 @@ model Integrator {
   status         String    @default("active") // active, suspended, trial, blocked
   // Commercial info
   cnpj           String?   @unique
-  tradeName      String?   @map("trade_name")      // nome fantasia
-  contactName    String?   @map("contact_name")     // responsável comercial
+  tradeName      String?   @map("trade_name") // nome fantasia
+  contactName    String?   @map("contact_name") // responsável comercial
   contactEmail   String?   @map("contact_email")
   contactPhone   String?   @map("contact_phone")
   contractNumber String?   @map("contract_number")
@@ -28,45 +28,45 @@ model Integrator {
   trialBlockedAt DateTime? @map("trial_blocked_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  schools          School[]
-  licenses         License[]
-  profiles         Profile[]
-  auditLogs        AuditLog[]
-  analyticsHourly  AnalyticsHourly[]
-  analyticsDaily   AnalyticsDaily[]
-  aiConfigs        AIConfig[]
+  schools           School[]
+  licenses          License[]
+  profiles          Profile[]
+  auditLogs         AuditLog[]
+  analyticsHourly   AnalyticsHourly[]
+  analyticsDaily    AnalyticsDaily[]
+  aiConfigs         AIConfig[]
   messagingChannels SchoolMessagingChannel[]
 
   @@map("integrators")
 }
 
 model License {
-  id           String     @id @default(uuid())
-  integratorId String     @map("integrator_id")
-  integrator   Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
-  plan         String     @default("professional") // trial, starter, professional, enterprise
-  maxSchools   Int        @default(25)  @map("max_schools")
-  maxDevices   Int        @default(250) @map("max_devices")
+  id             String     @id @default(uuid())
+  integratorId   String     @map("integrator_id")
+  integrator     Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
+  plan           String     @default("professional") // trial, starter, professional, enterprise
+  maxSchools     Int        @default(25) @map("max_schools")
+  maxDevices     Int        @default(250) @map("max_devices")
   // status: active | expiring | expired | grace | blocked | trial | cancelled
-  status       String     @default("active")
-  validFrom    DateTime   @map("valid_from")
-  validTo      DateTime   @map("valid_to")
-  graceUntil   DateTime?  @map("grace_until")   // validTo + 12 days grace window
+  status         String     @default("active")
+  validFrom      DateTime   @map("valid_from")
+  validTo        DateTime   @map("valid_to")
+  graceUntil     DateTime?  @map("grace_until") // validTo + 12 days grace window
   // Renewal chain
-  renewedFromId String?   @map("renewed_from_id")
-  renewedFrom   License?  @relation("LicenseRenewals", fields: [renewedFromId], references: [id], onDelete: SetNull)
-  renewals      License[] @relation("LicenseRenewals")
+  renewedFromId  String?    @map("renewed_from_id")
+  renewedFrom    License?   @relation("LicenseRenewals", fields: [renewedFromId], references: [id], onDelete: SetNull)
+  renewals       License[]  @relation("LicenseRenewals")
   // Notification audit trail (null = not yet sent)
-  notifiedAt30d   DateTime? @map("notified_at_30d")
-  notifiedAt14d   DateTime? @map("notified_at_14d")
-  notifiedAt7d    DateTime? @map("notified_at_7d")
-  notifiedAt3d    DateTime? @map("notified_at_3d")
-  notifiedAt1d    DateTime? @map("notified_at_1d")
-  notifiedExpiry  DateTime? @map("notified_expiry")
-  notifiedGrace   DateTime? @map("notified_grace")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  notifiedAt30d  DateTime?  @map("notified_at_30d")
+  notifiedAt14d  DateTime?  @map("notified_at_14d")
+  notifiedAt7d   DateTime?  @map("notified_at_7d")
+  notifiedAt3d   DateTime?  @map("notified_at_3d")
+  notifiedAt1d   DateTime?  @map("notified_at_1d")
+  notifiedExpiry DateTime?  @map("notified_expiry")
+  notifiedGrace  DateTime?  @map("notified_grace")
+  createdAt      DateTime   @default(now()) @map("created_at")
 
-  events       LicenseEvent[]
+  events LicenseEvent[]
 
   @@index([integratorId, status])
   @@map("licenses")
@@ -75,30 +75,30 @@ model License {
 // ─── AUTH ──────────────────────────────────────
 
 model Profile {
-  id           String      @id @default(uuid())
-  email        String      @unique
-  passwordHash String      @map("password_hash")
-  name         String
-  role         Role
-  integratorId String?     @map("integrator_id")
-  integrator   Integrator? @relation(fields: [integratorId], references: [id], onDelete: Cascade)
-  schoolId     String?     @map("school_id")
-  school       School?     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  isActive     Boolean     @default(true) @map("is_active")
-  lastLoginAt  DateTime?   @map("last_login_at")
-  createdAt    DateTime    @default(now()) @map("created_at")
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  passwordHash       String              @map("password_hash")
+  name               String
+  role               Role
+  integratorId       String?             @map("integrator_id")
+  integrator         Integrator?         @relation(fields: [integratorId], references: [id], onDelete: Cascade)
+  schoolId           String?             @map("school_id")
+  school             School?             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  isActive           Boolean             @default(true) @map("is_active")
+  lastLoginAt        DateTime?           @map("last_login_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
   passwordResetToken PasswordResetToken?
 
   @@map("profiles")
 }
 
 model PasswordResetToken {
-  id         String   @id
-  profileId  String   @unique @map("profile_id")
-  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  tokenHash  String   @unique @map("token_hash")
-  expiresAt  DateTime @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id        String   @id
+  profileId String   @unique @map("profile_id")
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([expiresAt])
   @@map("password_reset_tokens")
@@ -116,36 +116,37 @@ enum Role {
 // ─── SCHOOLS ──────────────────────────────────
 
 model School {
-  id           String     @id @default(uuid())
-  integratorId String     @map("integrator_id")
-  integrator   Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
-  name         String
-  slug         String
-  timezone     String     @default("America/Sao_Paulo")
-  status       String     @default("active")
+  id                      String     @id @default(uuid())
+  integratorId            String     @map("integrator_id")
+  integrator              Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
+  name                    String
+  slug                    String
+  timezone                String     @default("America/Sao_Paulo")
+  status                  String     @default("active")
   // Per-school billing managed by the integrator
   // billingStatus: ok | warning | blocked
-  billingStatus    String?   @default("ok")   @map("billing_status")
-  billingNote      String?   @map("billing_note")         // free-text reason shown to school_admin
-  billingValidUntil DateTime? @map("billing_valid_until") // integrator sets expiry per school
-  billingWarningAt  DateTime? @map("billing_warning_at")  // show banner to school_admin from this date
-  billingBlockAt    DateTime? @map("billing_block_at")    // hard block from this date
-  billingUpdatedAt  DateTime? @map("billing_updated_at")
-  billingUpdatedBy  String?   @map("billing_updated_by")  // profileId of integrator admin who changed it
-  allowPhotoNotifications Boolean @default(false) @map("allow_photo_notifications")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  billingStatus           String?    @default("ok") @map("billing_status")
+  billingNote             String?    @map("billing_note") // free-text reason shown to school_admin
+  billingValidUntil       DateTime?  @map("billing_valid_until") // integrator sets expiry per school
+  billingWarningAt        DateTime?  @map("billing_warning_at") // show banner to school_admin from this date
+  billingBlockAt          DateTime?  @map("billing_block_at") // hard block from this date
+  billingUpdatedAt        DateTime?  @map("billing_updated_at")
+  billingUpdatedBy        String?    @map("billing_updated_by") // profileId of integrator admin who changed it
+  allowPhotoNotifications Boolean    @default(false) @map("allow_photo_notifications")
+  createdAt               DateTime   @default(now()) @map("created_at")
 
-  units              SchoolUnit[]
-  students           Student[]
-  profiles           Profile[]
-  accessEvents       AccessEvent[]
-  tvPanelConfigs     TvPanelConfig[]
-  analyticsHourly    AnalyticsHourly[]
-  analyticsDaily     AnalyticsDaily[]
+  units               SchoolUnit[]
+  classes             SchoolClass[]
+  students            Student[]
+  profiles            Profile[]
+  accessEvents        AccessEvent[]
+  tvPanelConfigs      TvPanelConfig[]
+  analyticsHourly     AnalyticsHourly[]
+  analyticsDaily      AnalyticsDaily[]
   attendanceSnapshots AttendanceSnapshot[]
-  aiConfigs          AIConfig[]
-  billingEvents      SchoolBillingEvent[]
-  messagingChannels  SchoolMessagingChannel[]
+  aiConfigs           AIConfig[]
+  billingEvents       SchoolBillingEvent[]
+  messagingChannels   SchoolMessagingChannel[]
 
   @@unique([integratorId, slug])
   @@map("schools")
@@ -170,27 +171,27 @@ model SchoolUnit {
 // ─── DEVICES ──────────────────────────────────
 
 model Device {
-  id            String     @id @default(uuid())
-  schoolUnitId  String     @map("school_unit_id")
-  schoolUnit    SchoolUnit @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
-  name          String
-  model         String?
-  serialNumber  String?    @map("serial_number")
-  localIdentifier String?  @map("local_identifier")
-  ipAddress     String     @map("ip_address")
-  port          Int        @default(80)
-  username      String     @default("admin")
-  passwordEnc   String?    @map("password_enc") // optional when credentials stay only on the edge
-  firmwareVer   String?    @map("firmware_ver")
-  location      String?    // "Portão Principal"
-  connectionPolicy String  @default("auto") @map("connection_policy") // auto, edge_only, direct_only, cloud_autoreg_only
-  connectivityMode String  @default("direct") @map("connectivity_mode") // direct, edge
-  edgeConnectorId String?  @map("edge_connector_id")
-  edgeConnector EdgeConnector? @relation(fields: [edgeConnectorId], references: [id], onDelete: SetNull)
-  status        String     @default("offline") // online, offline, unstable
-  lastHeartbeat DateTime?  @map("last_heartbeat")
-  lastEventAt   DateTime?  @map("last_event_at")
-  isVirtual     Boolean    @default(false) @map("is_virtual") // virtual simulator device
+  id               String         @id @default(uuid())
+  schoolUnitId     String         @map("school_unit_id")
+  schoolUnit       SchoolUnit     @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
+  name             String
+  model            String?
+  serialNumber     String?        @map("serial_number")
+  localIdentifier  String?        @map("local_identifier")
+  ipAddress        String         @map("ip_address")
+  port             Int            @default(80)
+  username         String         @default("admin")
+  passwordEnc      String?        @map("password_enc") // optional when credentials stay only on the edge
+  firmwareVer      String?        @map("firmware_ver")
+  location         String? // "Portão Principal"
+  connectionPolicy String         @default("auto") @map("connection_policy") // auto, edge_only, direct_only, cloud_autoreg_only
+  connectivityMode String         @default("direct") @map("connectivity_mode") // direct, edge
+  edgeConnectorId  String?        @map("edge_connector_id")
+  edgeConnector    EdgeConnector? @relation(fields: [edgeConnectorId], references: [id], onDelete: SetNull)
+  status           String         @default("offline") // online, offline, unstable
+  lastHeartbeat    DateTime?      @map("last_heartbeat")
+  lastEventAt      DateTime?      @map("last_event_at")
+  isVirtual        Boolean        @default(false) @map("is_virtual") // virtual simulator device
 
   syncJobs     DeviceSyncJob[]
   studentLinks DeviceStudentLink[]
@@ -200,22 +201,22 @@ model Device {
 }
 
 model EdgeConnector {
-  id            String      @id @default(uuid())
-  schoolUnitId  String      @map("school_unit_id")
-  schoolUnit    SchoolUnit  @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
-  name          String
-  hostname      String?
-  version       String?
-  status        String      @default("provisioning") // provisioning, online, degraded, offline, suspended
-  cloudMode     String      @default("outbound_only") @map("cloud_mode") // outbound_only, wireguard_management
-  apiKeyHash    String      @map("api_key_hash")
-  lastSeenAt    DateTime?   @map("last_seen_at")
-  lastIp        String?     @map("last_ip")
-  localSubnets  String[]    @default([]) @map("local_subnets")
-  capabilities  Json?
-  metadata      Json?
-  claimedAt     DateTime?   @map("claimed_at")
-  createdAt     DateTime    @default(now()) @map("created_at")
+  id           String     @id @default(uuid())
+  schoolUnitId String     @map("school_unit_id")
+  schoolUnit   SchoolUnit @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
+  name         String
+  hostname     String?
+  version      String?
+  status       String     @default("provisioning") // provisioning, online, degraded, offline, suspended
+  cloudMode    String     @default("outbound_only") @map("cloud_mode") // outbound_only, wireguard_management
+  apiKeyHash   String     @map("api_key_hash")
+  lastSeenAt   DateTime?  @map("last_seen_at")
+  lastIp       String?    @map("last_ip")
+  localSubnets String[]   @default([]) @map("local_subnets")
+  capabilities Json?
+  metadata     Json?
+  claimedAt    DateTime?  @map("claimed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
 
   devices          Device[]
   enrollmentTokens EdgeEnrollmentToken[]
@@ -225,34 +226,47 @@ model EdgeConnector {
 }
 
 model EdgeEnrollmentToken {
-  id                String         @id @default(uuid())
-  schoolUnitId      String         @map("school_unit_id")
-  schoolUnit        SchoolUnit     @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
-  edgeConnectorId   String?        @map("edge_connector_id")
-  edgeConnector     EdgeConnector? @relation(fields: [edgeConnectorId], references: [id], onDelete: SetNull)
-  tokenHash         String         @unique @map("token_hash")
-  label             String?
-  createdByProfileId String?       @map("created_by_profile_id")
-  expiresAt         DateTime       @map("expires_at")
-  usedAt            DateTime?      @map("used_at")
-  metadata          Json?
-  createdAt         DateTime       @default(now()) @map("created_at")
+  id                 String         @id @default(uuid())
+  schoolUnitId       String         @map("school_unit_id")
+  schoolUnit         SchoolUnit     @relation(fields: [schoolUnitId], references: [id], onDelete: Cascade)
+  edgeConnectorId    String?        @map("edge_connector_id")
+  edgeConnector      EdgeConnector? @relation(fields: [edgeConnectorId], references: [id], onDelete: SetNull)
+  tokenHash          String         @unique @map("token_hash")
+  label              String?
+  createdByProfileId String?        @map("created_by_profile_id")
+  expiresAt          DateTime       @map("expires_at")
+  usedAt             DateTime?      @map("used_at")
+  metadata           Json?
+  createdAt          DateTime       @default(now()) @map("created_at")
 
   @@index([schoolUnitId, expiresAt])
   @@map("edge_enrollment_tokens")
 }
 
-// ─── STUDENTS ─────────────────────────────────
+// ─── STUDENTS & CLASSES ───────────────────────
+
+model SchoolClass {
+  id         String   @id @default(uuid())
+  schoolId   String   @map("school_id")
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  grade      String
+  classGroup String   @map("class_group")
+  shift      String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([schoolId, grade, classGroup, shift])
+  @@map("school_classes")
+}
 
 model Student {
   id         String   @id @default(uuid())
   schoolId   String   @map("school_id")
   school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   name       String
-  enrollment String   // matrícula
-  grade      String?  // série
+  enrollment String // matrícula
+  grade      String? // série
   classGroup String?  @map("class_group") // turma "8A"
-  shift      String?  // manhã, tarde, integral
+  shift      String? // manhã, tarde, integral
   status     String   @default("active")
   createdAt  DateTime @default(now()) @map("created_at")
 
@@ -270,7 +284,7 @@ model StudentPhoto {
   studentId        String   @unique @map("student_id")
   student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   storagePath      String   @map("storage_path")
-  base64Optimized  String?  @db.Text @map("base64_optimized")
+  base64Optimized  String?  @map("base64_optimized") @db.Text
   width            Int?
   height           Int?
   sizeBytes        Int?     @map("size_bytes")
@@ -301,7 +315,7 @@ model DeviceStudentLink {
 model Guardian {
   id        String   @id @default(uuid())
   name      String
-  phone     String?  // WhatsApp
+  phone     String? // WhatsApp
   email     String?
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -316,7 +330,7 @@ model StudentGuardian {
   student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   guardianId  String   @map("guardian_id")
   guardian    Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
-  relation    String   // mae, pai, tutor, motorista
+  relation    String // mae, pai, tutor, motorista
   priority    Int      @default(1)
   notifyEntry Boolean  @default(true) @map("notify_entry")
   notifyExit  Boolean  @default(true) @map("notify_exit")
@@ -331,25 +345,25 @@ model StudentGuardian {
 // ─── EVENTS ───────────────────────────────────
 
 model AccessEvent {
-  id             String    @id @default(uuid())
-  schoolId       String    @map("school_id")
-  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  deviceId       String    @map("device_id")
-  device         Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  studentId      String?   @map("student_id")
-  student        Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  eventCode      String    @map("event_code") // AccessControl, BreakIn, Duress
-  method         String?   // Face, Card, Password
+  id             String   @id @default(uuid())
+  schoolId       String   @map("school_id")
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  deviceId       String   @map("device_id")
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  studentId      String?  @map("student_id")
+  student        Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  eventCode      String   @map("event_code") // AccessControl, BreakIn, Duress
+  method         String? // Face, Card, Password
   door           Int?
-  direction      String?   // entry, exit
-  status         String    // granted, denied, pending_link
-  userIdRaw      String?   @map("user_id_raw")
-  cardNoRaw      String?   @map("card_no_raw")
-  photoPath      String?   @map("photo_path")
-  rawPayload     Json?     @map("raw_payload")
-  idempotencyKey String    @unique @map("idempotency_key")
-  occurredAt     DateTime  @map("occurred_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  direction      String? // entry, exit
+  status         String // granted, denied, pending_link
+  userIdRaw      String?  @map("user_id_raw")
+  cardNoRaw      String?  @map("card_no_raw")
+  photoPath      String?  @map("photo_path")
+  rawPayload     Json?    @map("raw_payload")
+  idempotencyKey String   @unique @map("idempotency_key")
+  occurredAt     DateTime @map("occurred_at")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   notifications NotificationJob[]
 
@@ -360,18 +374,18 @@ model AccessEvent {
 // ─── NOTIFICATIONS ────────────────────────────
 
 model NotificationJob {
-  id            String    @id @default(uuid())
-  eventId       String    @map("event_id")
+  id            String      @id @default(uuid())
+  eventId       String      @map("event_id")
   event         AccessEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  channel       String    // whatsapp, email, telegram
+  channel       String // whatsapp, email, telegram
   recipient     String
-  recipientName String?   @map("recipient_name")
+  recipientName String?     @map("recipient_name")
   template      String?
-  status        String    @default("pending") // pending, sent, failed, dead
-  attempts      Int       @default(0)
-  lastError     String?   @map("last_error")
-  sentAt        DateTime? @map("sent_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  status        String      @default("pending") // pending, sent, failed, dead
+  attempts      Int         @default(0)
+  lastError     String?     @map("last_error")
+  sentAt        DateTime?   @map("sent_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
 
   @@index([status, createdAt])
   @@map("notification_jobs")
@@ -380,19 +394,19 @@ model NotificationJob {
 // ─── DEVICE SYNC ──────────────────────────────
 
 model DeviceSyncJob {
-  id            String    @id @default(uuid())
-  deviceId      String    @map("device_id")
-  device        Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  syncType      String    @map("sync_type") // user_insert, user_update, face_insert, face_remove
-  payload       Json
-  status        String    @default("pending") // pending, in_progress, synced, failed, retrying
-  claimedByEdgeId String? @map("claimed_by_edge_id")
-  claimedAt     DateTime? @map("claimed_at")
-  leaseExpiresAt DateTime? @map("lease_expires_at")
-  attempts      Int       @default(0)
-  lastError     String?   @map("last_error")
-  lastAttemptAt DateTime? @map("last_attempt_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  id              String    @id @default(uuid())
+  deviceId        String    @map("device_id")
+  device          Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  syncType        String    @map("sync_type") // user_insert, user_update, face_insert, face_remove
+  payload         Json
+  status          String    @default("pending") // pending, in_progress, synced, failed, retrying
+  claimedByEdgeId String?   @map("claimed_by_edge_id")
+  claimedAt       DateTime? @map("claimed_at")
+  leaseExpiresAt  DateTime? @map("lease_expires_at")
+  attempts        Int       @default(0)
+  lastError       String?   @map("last_error")
+  lastAttemptAt   DateTime? @map("last_attempt_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   @@index([status, createdAt])
   @@map("device_sync_jobs")
@@ -401,16 +415,16 @@ model DeviceSyncJob {
 // ─── SELF-SERVICE REGISTRATION ────────────────
 
 model PendingRegistration {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  otpHash     String   @map("otp_hash")
-  payload     Json     // { companyName, adminName, passwordHash, slug }
-  expiresAt   DateTime @map("expires_at")
-  attempts    Int      @default(0)
+  id        String   @id @default(uuid())
+  email     String   @unique
+  otpHash   String   @map("otp_hash")
+  payload   Json // { companyName, adminName, passwordHash, slug }
+  expiresAt DateTime @map("expires_at")
+  attempts  Int      @default(0)
   // Trial anti-abuse: CNPJ/CPF provided at registration
-  document    String?  // raw value (CNPJ or CPF digits only)
-  docType     String?  @map("doc_type") // "cnpj" | "cpf"
-  createdAt   DateTime @default(now()) @map("created_at")
+  document  String? // raw value (CNPJ or CPF digits only)
+  docType   String?  @map("doc_type") // "cnpj" | "cpf"
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("pending_registrations")
 }
@@ -418,20 +432,20 @@ model PendingRegistration {
 // ─── ANALYTICS ────────────────────────────────
 
 model AnalyticsHourly {
-  id           String   @id @default(uuid())
-  schoolId     String   @map("school_id")
-  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  integratorId String   @map("integrator_id")
+  id           String     @id @default(uuid())
+  schoolId     String     @map("school_id")
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  integratorId String     @map("integrator_id")
   integrator   Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
-  bucketHour   DateTime @map("bucket_hour")
+  bucketHour   DateTime   @map("bucket_hour")
 
-  totalEvents     Int @default(0) @map("total_events")
-  entryEvents     Int @default(0) @map("entry_events")
-  exitEvents      Int @default(0) @map("exit_events")
-  grantedEvents   Int @default(0) @map("granted_events")
-  deniedEvents    Int @default(0) @map("denied_events")
-  pendingEvents   Int @default(0) @map("pending_events")
-  uniqueStudents  Int @default(0) @map("unique_students")
+  totalEvents    Int @default(0) @map("total_events")
+  entryEvents    Int @default(0) @map("entry_events")
+  exitEvents     Int @default(0) @map("exit_events")
+  grantedEvents  Int @default(0) @map("granted_events")
+  deniedEvents   Int @default(0) @map("denied_events")
+  pendingEvents  Int @default(0) @map("pending_events")
+  uniqueStudents Int @default(0) @map("unique_students")
 
   notificationsSent   Int @default(0) @map("notifications_sent")
   notificationsFailed Int @default(0) @map("notifications_failed")
@@ -448,30 +462,30 @@ model AnalyticsHourly {
 }
 
 model AnalyticsDaily {
-  id           String   @id @default(uuid())
-  schoolId     String   @map("school_id")
-  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  integratorId String   @map("integrator_id")
+  id           String     @id @default(uuid())
+  schoolId     String     @map("school_id")
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  integratorId String     @map("integrator_id")
   integrator   Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
-  reportDate   DateTime @db.Date @map("report_date")
+  reportDate   DateTime   @map("report_date") @db.Date
 
   totalStudentsExpected Int?     @map("total_students_expected")
   totalStudentsPresent  Int?     @map("total_students_present")
-  attendanceRate        Decimal? @db.Decimal(5, 2) @map("attendance_rate")
+  attendanceRate        Decimal? @map("attendance_rate") @db.Decimal(5, 2)
 
-  totalEvents   Int @default(0) @map("total_events")
-  totalEntries  Int @default(0) @map("total_entries")
-  totalExits    Int @default(0) @map("total_exits")
-  totalDenied   Int @default(0) @map("total_denied")
-  totalUnlinked Int @default(0) @map("total_unlinked")
+  totalEvents   Int  @default(0) @map("total_events")
+  totalEntries  Int  @default(0) @map("total_entries")
+  totalExits    Int  @default(0) @map("total_exits")
+  totalDenied   Int  @default(0) @map("total_denied")
+  totalUnlinked Int  @default(0) @map("total_unlinked")
   peakHour      Int? @map("peak_hour")
 
   notificationsTotal  Int?     @map("notifications_total")
   notificationsSent   Int?     @map("notifications_sent")
   notificationsFailed Int?     @map("notifications_failed")
-  deliveryRate        Decimal? @db.Decimal(5, 2) @map("delivery_rate")
+  deliveryRate        Decimal? @map("delivery_rate") @db.Decimal(5, 2)
 
-  avgUptimePercent Decimal? @db.Decimal(5, 2) @map("avg_uptime_percent")
+  avgUptimePercent Decimal? @map("avg_uptime_percent") @db.Decimal(5, 2)
   incidentsCount   Int      @default(0) @map("incidents_count")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -483,13 +497,13 @@ model AnalyticsDaily {
 }
 
 model AttendanceSnapshot {
-  id           String   @id @default(uuid())
-  schoolId     String   @map("school_id")
-  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  studentId    String   @map("student_id")
-  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  snapshotDate DateTime @db.Date @map("snapshot_date")
-  present      Boolean  @default(false)
+  id           String    @id @default(uuid())
+  schoolId     String    @map("school_id")
+  school       School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId    String    @map("student_id")
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  snapshotDate DateTime  @map("snapshot_date") @db.Date
+  present      Boolean   @default(false)
   firstEntry   DateTime? @map("first_entry")
   lastExit     DateTime? @map("last_exit")
   totalEvents  Int       @default(0) @map("total_events")
@@ -532,24 +546,24 @@ model TvPanelConfig {
 
 // AIConfig: tenant-wide when schoolId is null, school override when schoolId is set
 model AIConfig {
-  id           String      @id @default(uuid())
-  integratorId String      @map("integrator_id")
-  integrator   Integrator  @relation(fields: [integratorId], references: [id], onDelete: Cascade)
-  schoolId     String?     @map("school_id")   // null = tenant-wide; set = school override
-  school       School?     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  id           String     @id @default(uuid())
+  integratorId String     @map("integrator_id")
+  integrator   Integrator @relation(fields: [integratorId], references: [id], onDelete: Cascade)
+  schoolId     String?    @map("school_id") // null = tenant-wide; set = school override
+  school       School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  primaryProvider  String  @default("gemini") @map("primary_provider") // gemini | openai
-  geminiApiKey     String? @map("gemini_api_key")
-  openaiApiKey     String? @map("openai_api_key")
-  geminiModel      String  @default("gemini-2.5-flash-preview-04-17") @map("gemini_model")
-  openaiModel      String  @default("gpt-4o-mini") @map("openai_model")
+  primaryProvider String  @default("gemini") @map("primary_provider") // gemini | openai
+  geminiApiKey    String? @map("gemini_api_key")
+  openaiApiKey    String? @map("openai_api_key")
+  geminiModel     String  @default("gemini-2.5-flash-preview-04-17") @map("gemini_model")
+  openaiModel     String  @default("gpt-4o-mini") @map("openai_model")
 
-  monthlyTokenQuota Int     @default(500000) @map("monthly_token_quota")
-  usedTokensMonth   Int     @default(0)      @map("used_tokens_month")
+  monthlyTokenQuota Int       @default(500000) @map("monthly_token_quota")
+  usedTokensMonth   Int       @default(0) @map("used_tokens_month")
   quotaResetAt      DateTime? @map("quota_reset_at")
 
   cacheEnabled    Boolean @default(true) @map("cache_enabled")
-  cacheTtlMinutes Int     @default(60)   @map("cache_ttl_minutes")
+  cacheTtlMinutes Int     @default(60) @map("cache_ttl_minutes")
   enabled         Boolean @default(false)
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -563,18 +577,18 @@ model AIConfig {
 }
 
 model AIQueryLog {
-  id          String   @id @default(uuid())
-  aiConfigId  String   @map("ai_config_id")
-  aiConfig    AIConfig @relation(fields: [aiConfigId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  aiConfigId String   @map("ai_config_id")
+  aiConfig   AIConfig @relation(fields: [aiConfigId], references: [id], onDelete: Cascade)
 
   provider     String
   model        String
-  queryType    String  @map("query_type") // nl_query | report_summary | anomaly_detect | attendance_insight
-  promptTokens Int     @default(0) @map("prompt_tokens")
-  replyTokens  Int     @default(0) @map("reply_tokens")
-  latencyMs    Int     @default(0) @map("latency_ms")
-  cached       Boolean @default(false)
-  errorCode    String? @map("error_code")
+  queryType    String   @map("query_type") // nl_query | report_summary | anomaly_detect | attendance_insight
+  promptTokens Int      @default(0) @map("prompt_tokens")
+  replyTokens  Int      @default(0) @map("reply_tokens")
+  latencyMs    Int      @default(0) @map("latency_ms")
+  cached       Boolean  @default(false)
+  errorCode    String?  @map("error_code")
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([aiConfigId, createdAt])
@@ -582,12 +596,12 @@ model AIQueryLog {
 }
 
 model AIReportCache {
-  id          String   @id @default(uuid())
-  cacheKey    String   @unique @map("cache_key")
-  reportType  String   @map("report_type")
-  payload     Json
-  expiresAt   DateTime @map("expires_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  cacheKey   String   @unique @map("cache_key")
+  reportType String   @map("report_type")
+  payload    Json
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([expiresAt])
   @@map("ai_report_caches")
@@ -596,16 +610,16 @@ model AIReportCache {
 // ─── LICENSE EVENTS ───────────────────────────
 
 model LicenseEvent {
-  id          String   @id @default(uuid())
-  licenseId   String   @map("license_id")
-  license     License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
-  event       String   // activated, expiring_30d, expiring_14d, expiring_7d, expiring_3d, expiring_1d, expired, grace_started, grace_blocked, renewed, cancelled
-  prevStatus  String?  @map("prev_status")
-  nextStatus  String?  @map("next_status")
-  actorId     String?  @map("actor_id")   // profileId or "system"
-  note        String?
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  licenseId  String   @map("license_id")
+  license    License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  event      String // activated, expiring_30d, expiring_14d, expiring_7d, expiring_3d, expiring_1d, expired, grace_started, grace_blocked, renewed, cancelled
+  prevStatus String?  @map("prev_status")
+  nextStatus String?  @map("next_status")
+  actorId    String?  @map("actor_id") // profileId or "system"
+  note       String?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([licenseId, createdAt])
   @@map("license_events")
@@ -614,16 +628,16 @@ model LicenseEvent {
 // ─── SCHOOL BILLING EVENTS ────────────────────
 
 model SchoolBillingEvent {
-  id        String   @id @default(uuid())
-  schoolId  String   @map("school_id")
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  event     String   // set_billing, warning_sent, blocked, unblocked, renewed
-  prevStatus String? @map("prev_status")
-  nextStatus String? @map("next_status")
-  actorId   String?  @map("actor_id")
-  note      String?
-  metadata  Json?
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  schoolId   String   @map("school_id")
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  event      String // set_billing, warning_sent, blocked, unblocked, renewed
+  prevStatus String?  @map("prev_status")
+  nextStatus String?  @map("next_status")
+  actorId    String?  @map("actor_id")
+  note       String?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([schoolId, createdAt])
   @@map("school_billing_events")
@@ -645,14 +659,14 @@ model SchoolMessagingChannel {
   phoneNumber        String?    @map("phone_number")
   ownerJid           String?    @map("owner_jid")
   profileName        String?    @map("profile_name")
-  profileStatus      String?    @db.Text @map("profile_status")
+  profileStatus      String?    @map("profile_status") @db.Text
   pairingCode        String?    @map("pairing_code")
-  qrCodePayload      String?    @db.Text @map("qr_code_payload")
+  qrCodePayload      String?    @map("qr_code_payload") @db.Text
   lastQrAt           DateTime?  @map("last_qr_at")
   lastConnectedAt    DateTime?  @map("last_connected_at")
   lastDisconnectedAt DateTime?  @map("last_disconnected_at")
   lastSyncAt         DateTime?  @map("last_sync_at")
-  lastError          String?    @db.Text @map("last_error")
+  lastError          String?    @map("last_error") @db.Text
   isActive           Boolean    @default(true) @map("is_active")
   metadata           Json?
   createdBy          String?    @map("created_by")
@@ -667,14 +681,14 @@ model SchoolMessagingChannel {
 }
 
 model BlockedDocument {
-  id          String   @id @default(uuid())
-  document    String   @unique // normalized CNPJ or CPF digits
-  docType     String   @map("doc_type") // cnpj | cpf
-  reason      String   @default("trial_used") // trial_used | manual | abuse
-  integratorId String? @map("integrator_id") // integrator that used the trial (if applicable)
-  note        String?
-  blockedAt   DateTime @default(now()) @map("blocked_at")
-  blockedBy   String?  @map("blocked_by") // profileId or "system"
+  id           String   @id @default(uuid())
+  document     String   @unique // normalized CNPJ or CPF digits
+  docType      String   @map("doc_type") // cnpj | cpf
+  reason       String   @default("trial_used") // trial_used | manual | abuse
+  integratorId String?  @map("integrator_id") // integrator that used the trial (if applicable)
+  note         String?
+  blockedAt    DateTime @default(now()) @map("blocked_at")
+  blockedBy    String?  @map("blocked_by") // profileId or "system"
 
   @@index([document])
   @@map("blocked_documents")
@@ -683,41 +697,41 @@ model BlockedDocument {
 // ─── PLATFORM CONFIG (singleton) ──────────────
 
 model PlatformConfig {
-  id        String   @id @default("singleton")
+  id String @id @default("singleton")
 
   // Trial settings
-  trialDays           Int     @default(7)   @map("trial_days")
-  trialMaxSchools     Int     @default(1)   @map("trial_max_schools")
-  trialMaxDevices     Int     @default(1)   @map("trial_max_devices")
-  trialGraceDays      Int     @default(0)   @map("trial_grace_days")    // 0 = no grace for trial
-  trialBlockOnExpiry  Boolean @default(true) @map("trial_block_on_expiry")
+  trialDays          Int     @default(7) @map("trial_days")
+  trialMaxSchools    Int     @default(1) @map("trial_max_schools")
+  trialMaxDevices    Int     @default(1) @map("trial_max_devices")
+  trialGraceDays     Int     @default(0) @map("trial_grace_days") // 0 = no grace for trial
+  trialBlockOnExpiry Boolean @default(true) @map("trial_block_on_expiry")
 
   // Commercial license grace
-  licenseGraceDays    Int     @default(12)  @map("license_grace_days")  // days after validTo before hard block
+  licenseGraceDays Int @default(12) @map("license_grace_days") // days after validTo before hard block
 
   // SMTP settings (stored encrypted or as env reference)
-  smtpHost     String?  @map("smtp_host")
-  smtpPort     Int?     @map("smtp_port")
-  smtpUser     String?  @map("smtp_user")
-  smtpPassEnc  String?  @map("smtp_pass_enc")  // AES-encrypted
-  smtpFrom     String?  @map("smtp_from")
-  smtpFromName String?  @map("smtp_from_name")
-  smtpSecure   Boolean  @default(true) @map("smtp_secure")
+  smtpHost     String? @map("smtp_host")
+  smtpPort     Int?    @map("smtp_port")
+  smtpUser     String? @map("smtp_user")
+  smtpPassEnc  String? @map("smtp_pass_enc") // AES-encrypted
+  smtpFrom     String? @map("smtp_from")
+  smtpFromName String? @map("smtp_from_name")
+  smtpSecure   Boolean @default(true) @map("smtp_secure")
 
   // Email templates (Handlebars / plain-text with {{variables}})
-  emailTrialWelcome      String? @db.Text @map("email_trial_welcome")
-  emailLicenseExpiring30 String? @db.Text @map("email_license_expiring_30")
-  emailLicenseExpiring7  String? @db.Text @map("email_license_expiring_7")
-  emailLicenseExpiring1  String? @db.Text @map("email_license_expiring_1")
-  emailLicenseExpired    String? @db.Text @map("email_license_expired")
-  emailLicenseGrace      String? @db.Text @map("email_license_grace")
-  emailTrialExpiring2d   String? @db.Text @map("email_trial_expiring_2d")
-  emailTrialExpiring1d   String? @db.Text @map("email_trial_expiring_1d")
-  emailTrialExpired      String? @db.Text @map("email_trial_expired")
+  emailTrialWelcome      String? @map("email_trial_welcome") @db.Text
+  emailLicenseExpiring30 String? @map("email_license_expiring_30") @db.Text
+  emailLicenseExpiring7  String? @map("email_license_expiring_7") @db.Text
+  emailLicenseExpiring1  String? @map("email_license_expiring_1") @db.Text
+  emailLicenseExpired    String? @map("email_license_expired") @db.Text
+  emailLicenseGrace      String? @map("email_license_grace") @db.Text
+  emailTrialExpiring2d   String? @map("email_trial_expiring_2d") @db.Text
+  emailTrialExpiring1d   String? @map("email_trial_expiring_1d") @db.Text
+  emailTrialExpired      String? @map("email_trial_expired") @db.Text
 
   // School billing email templates
-  emailSchoolWarning String? @db.Text @map("email_school_warning")
-  emailSchoolBlocked String? @db.Text @map("email_school_blocked")
+  emailSchoolWarning String? @map("email_school_warning") @db.Text
+  emailSchoolBlocked String? @map("email_school_blocked") @db.Text
 
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by") // profileId

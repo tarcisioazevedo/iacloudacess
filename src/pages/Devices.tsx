@@ -74,7 +74,7 @@ const CONNECTION_POLICY_OPTIONS: Array<{
   { value: 'cloud_autoreg_only', label: 'Via CGI Intelbras' },
 ];
 
-export default function Devices() {
+export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?: boolean; hubSchoolId?: string | null }) {
   const { token, user, profile } = useAuth() as any;
   const [devices, setDevices] = useState<DeviceData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +86,14 @@ export default function Devices() {
   const [filterIntegratorId, setFilterIntegratorId] = useState<string>('');
   const [schools, setSchools] = useState<any[]>([]);
   const [integrators, setIntegrators] = useState<any[]>([]);
-  const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [isFilterOpen, setIsFilterOpen] = useState(!isHubMode);
+
+  // Sync hubSchoolId filter if inside Hub Mode
+  useEffect(() => {
+    if (isHubMode && hubSchoolId) {
+      setFilterSchoolId(hubSchoolId);
+    }
+  }, [hubSchoolId, isHubMode]);
 
   // Add Device Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -127,8 +134,12 @@ export default function Devices() {
       .then((data) => {
          const fetchedSchools = data.schools || [];
          setSchools(fetchedSchools);
-         if (fetchedSchools.length > 0) {
-           fetch(`/api/schools/${fetchedSchools[0].id}`, { headers: { Authorization: `Bearer ${token}` } })
+
+         // Fetch limits the units available to the currently selected school (or the first one)
+         const targetSchoolIdToLoadUnits = filterSchoolId || (fetchedSchools.length > 0 ? fetchedSchools[0].id : null);
+
+         if (targetSchoolIdToLoadUnits) {
+           fetch(`/api/schools/${targetSchoolIdToLoadUnits}`, { headers: { Authorization: `Bearer ${token}` } })
              .then(r => r.json())
              .then(sd => {
                if (sd.school && sd.school.units) {
@@ -138,8 +149,13 @@ export default function Devices() {
                    schoolName: sd.school.name
                  })));
                  setAddForm(prev => ({ ...prev, schoolUnitId: sd.school.units[0]?.id || '' }));
+               } else {
+                 setAvailableUnits([]);
+                 setAddForm(prev => ({ ...prev, schoolUnitId: '' }));
                }
              });
+         } else {
+            setAvailableUnits([]);
          }
       })
       .catch(() => {});
@@ -257,24 +273,29 @@ export default function Devices() {
     <div className="animate-fade-in-up">
       <div style={{ marginBottom: isFilterOpen ? 16 : 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <HardDrive size={22} /> Dispositivos
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-            {devices.length} dispositivos cadastrados
-          </p>
+          {!isHubMode && (
+            <>
+              <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <HardDrive size={22} /> Dispositivos
+              </h1>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                {devices.length} dispositivos cadastrados
+              </p>
+            </>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <button 
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            onClick={() => { if (!isHubMode) setIsFilterOpen(!isFilterOpen); }}
             style={{ 
-              background: isFilterOpen ? 'var(--color-primary-50)' : 'var(--color-surface)', 
-              color: isFilterOpen ? 'var(--color-primary-700)' : 'var(--color-text-primary)', 
-              border: `1px solid ${isFilterOpen ? 'var(--color-primary-200)' : 'var(--color-border)'}`, 
+              background: isFilterOpen && !isHubMode ? 'var(--color-primary-50)' : 'var(--color-surface)', 
+              color: isFilterOpen && !isHubMode ? 'var(--color-primary-700)' : 'var(--color-text-primary)', 
+              border: `1px solid ${isFilterOpen && !isHubMode ? 'var(--color-primary-200)' : 'var(--color-border)'}`, 
               padding: '9px 14px', 
               borderRadius: 'var(--radius-md)', 
               fontWeight: 600, 
-              cursor: 'pointer', 
+              cursor: isHubMode ? 'default' : 'pointer',
+              opacity: isHubMode ? 0.5 : 1,
               display: 'flex', 
               alignItems: 'center', 
               gap: 8,
@@ -283,7 +304,7 @@ export default function Devices() {
           >
             <Filter size={16} /> 
             Filtros
-            {activeFiltersCount > 0 && (
+            {(activeFiltersCount > 0 && !isHubMode) && (
               <span style={{ background: 'var(--color-primary-600)', color: 'white', fontSize: 11, padding: '2px 6px', borderRadius: 10 }}>
                 {activeFiltersCount}
               </span>
@@ -298,7 +319,7 @@ export default function Devices() {
         </div>
       </div>
 
-      {isFilterOpen && (
+      {(isFilterOpen && !isHubMode) && (
         <div 
           className="animate-fade-in-up" 
           style={{ 

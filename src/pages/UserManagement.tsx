@@ -47,11 +47,12 @@ const CREATABLE_ROLES: Record<string, string[]> = {
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 
-function CreateUserModal({ token, callerRole, callerSchoolId, callerIntegratorId, onClose, onCreated }: {
+function CreateUserModal({ token, callerRole, callerSchoolId, callerIntegratorId, isHubMode, onClose, onCreated }: {
   token: string;
   callerRole: string;
   callerSchoolId: string | null;
   callerIntegratorId: string | null;
+  isHubMode?: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -162,7 +163,7 @@ function CreateUserModal({ token, callerRole, callerSchoolId, callerIntegratorId
           </div>
 
           {/* School selector — shown for school-level roles */}
-          {needsSchool && schools.length > 0 && (
+          {needsSchool && schools.length > 0 && !isHubMode && (
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 4 }}>Escola *</label>
               <select
@@ -172,6 +173,14 @@ function CreateUserModal({ token, callerRole, callerSchoolId, callerIntegratorId
                 <option value="">Selecione a escola...</option>
                 {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
+            </div>
+          )}
+
+          {/* Se estiver no Hub e precisar de escola, mostra apenas um campo fixo readonly */}
+          {needsSchool && isHubMode && callerSchoolId && (
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 4 }}>Escola Associada</label>
+              <input type="text" value={schools.find(s => s.id === callerSchoolId)?.name || 'Escola Atual'} disabled style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: 13, background: 'var(--color-surface)', color: 'var(--color-text-muted)' }} />
             </div>
           )}
 
@@ -204,7 +213,7 @@ function CreateUserModal({ token, callerRole, callerSchoolId, callerIntegratorId
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function UserManagement() {
+export default function UserManagement({ isHubMode = false, hubSchoolId }: { isHubMode?: boolean; hubSchoolId?: string | null }) {
   const { token, profile } = useAuth();
   const role = profile?.role || '';
 
@@ -221,6 +230,7 @@ export default function UserManagement() {
     setLoading(true);
     const params = new URLSearchParams();
     if (roleFilter) params.set('role', roleFilter);
+    if (hubSchoolId) params.set('schoolId', hubSchoolId);
     fetch(`/api/profiles?${params}`, { headers: h })
       .then(r => r.json())
       .then(d => setProfiles(d.profiles || []))
@@ -228,7 +238,7 @@ export default function UserManagement() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [roleFilter, token]);
+  useEffect(() => { load(); }, [roleFilter, token, hubSchoolId]);
 
   const handleToggleActive = async (p: UserProfile) => {
     const res = await fetch(`/api/profiles/${p.id}`, {
@@ -250,12 +260,16 @@ export default function UserManagement() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Users size={22} color="var(--color-primary-600)" /> Gestão de Usuários
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            {filtered.length} usuário{filtered.length !== 1 ? 's' : ''} no seu escopo
-          </p>
+          {!isHubMode && (
+            <>
+              <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Users size={22} color="var(--color-primary-600)" /> Gestão de Usuários
+              </h1>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                {filtered.length} usuário{filtered.length !== 1 ? 's' : ''} no seu escopo
+              </p>
+            </>
+          )}
         </div>
         {creatableRoles.length > 0 && (
           <button onClick={() => setShowCreate(true)} style={{
@@ -424,13 +438,14 @@ export default function UserManagement() {
         />
       )}
 
-      {/* Create modal */}
+      {/* Modals */}
       {showCreate && (
         <CreateUserModal
-          token={token!}
+          token={token}
           callerRole={role}
-          callerSchoolId={profile?.schoolId || null}
+          callerSchoolId={hubSchoolId || profile?.schoolId || null}
           callerIntegratorId={profile?.integratorId || null}
+          isHubMode={isHubMode}
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); load(); }}
         />

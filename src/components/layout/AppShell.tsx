@@ -19,10 +19,8 @@ const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; path: st
     { label: 'IA Analytics', icon: <Brain size={18} />, path: '/ai-reports', roles: ['superadmin', 'integrator_admin', 'integrator_support', 'school_admin', 'coordinator'] },
   ],
   escola: [
-    { label: 'Alunos', icon: <Users size={18} />, path: '/students', roles: ['school_admin', 'coordinator', 'integrator_admin', 'superadmin'] },
-    { label: 'Dispositivos', icon: <HardDrive size={18} />, path: '/devices', roles: ['school_admin', 'integrator_admin', 'integrator_support', 'superadmin'] },
+    { label: 'Secretaria Acadêmica', icon: <School size={18} />, path: '/school-hub', roles: ['school_admin', 'coordinator', 'operator', 'integrator_admin', 'integrator_support', 'superadmin'] },
     { label: 'Edges', icon: <Shield size={18} />, path: '/edges', roles: ['integrator_admin', 'integrator_support', 'superadmin'] },
-    { label: 'WhatsApp Escolar', icon: <MessageSquare size={18} />, path: '/whatsapp', roles: ['school_admin', 'integrator_admin', 'integrator_support', 'superadmin'] },
     { label: 'Histórico', icon: <Clock size={18} />, path: '/history', roles: ['school_admin', 'coordinator', 'operator', 'integrator_admin', 'superadmin'] },
     { label: 'Notificações', icon: <Bell size={18} />, path: '/notifications', roles: ['school_admin', 'coordinator', 'integrator_admin', 'superadmin'] },
   ],
@@ -37,7 +35,7 @@ const NAV_ITEMS: Record<string, { label: string; icon: React.ReactNode; path: st
     { label: 'Ops Center', icon: <Shield size={18} />, path: '/ops-center', roles: ['superadmin', 'integrator_admin', 'integrator_support', 'school_admin', 'coordinator'] },
     { label: 'Dispositivos Virtuais', icon: <Bot size={18} />, path: '/virtual-devices', roles: ['integrator_admin', 'integrator_support', 'superadmin', 'school_admin'] },
     { label: 'TV Panels', icon: <Tv size={18} />, path: '/tv-panels', roles: ['superadmin', 'integrator_admin', 'school_admin'] },
-    { label: 'Usuários', icon: <UserCog size={18} />, path: '/users', roles: ['integrator_admin', 'integrator_support', 'school_admin', 'coordinator'] },
+    { label: 'Usuários', icon: <UserCog size={18} />, path: '/users', roles: ['integrator_admin', 'integrator_support'] },
   ],
 };
 

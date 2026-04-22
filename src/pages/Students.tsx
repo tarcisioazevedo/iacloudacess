@@ -272,8 +272,8 @@ function CSVImportModal({ token, onClose, onImported }: {
 }
 
 // ─── Main Students Page ──────────────────────
-export default function Students() {
-  const { token } = useAuth();
+export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode?: boolean; hubSchoolId?: string | null }) {
+  const { profile, token } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -282,21 +282,28 @@ export default function Students() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' });
   const [loading, setLoading] = useState(true);
+  const [schoolClasses, setSchoolClasses] = useState<any[]>([]);
 
   const load = () => {
     if (!token) return;
-    fetch('/api/students', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => setStudents(d.students || []))
-      .catch(() => {}).finally(() => setLoading(false));
+    const query = hubSchoolId ? `?schoolId=${hubSchoolId}` : '';
+    Promise.all([
+      fetch(`/api/students${query}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/school-classes${query}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+    ]).then(([studentsData, classesData]) => {
+      setStudents(studentsData.students || []);
+      setSchoolClasses(classesData.classes || []);
+    }).catch(() => {}).finally(() => setLoading(false));
   };
-  useEffect(load, [token]);
+  useEffect(load, [token, hubSchoolId]);
 
   const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.enrollment.includes(search));
   const photoStats = { total: students.length, withPhoto: students.filter(s => s.photo).length };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('/api/students', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(form) });
+    const payload = { ...form, schoolId: hubSchoolId || undefined };
+    await fetch('/api/students', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) });
     setShowForm(false); setForm({ name: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' }); load();
   };
 
@@ -305,8 +312,12 @@ export default function Students() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}><Users size={22} /> Alunos</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>{students.length} alunos cadastrados</p>
+          {!isHubMode && (
+            <>
+              <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}><Users size={22} /> Alunos</h1>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>{students.length} alunos cadastrados</p>
+            </>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setShowImport(true)} style={{
@@ -324,7 +335,8 @@ export default function Students() {
             onClick={e => {
               // Inject auth token via fetch-redirect since <a> can't set headers
               e.preventDefault();
-              fetch('/api/students/export', { headers: { Authorization: `Bearer ${token}` } })
+              const exportQuery = hubSchoolId ? `?schoolId=${hubSchoolId}` : '';
+              fetch(`/api/students/export${exportQuery}`, { headers: { Authorization: `Bearer ${token}` } })
                 .then(r => r.blob()).then(blob => {
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -459,8 +471,6 @@ export default function Students() {
               {[
                 { label: 'Nome completo', key: 'name', type: 'text', required: true },
                 { label: 'Matrícula', key: 'enrollment', type: 'text', required: true },
-                { label: 'Série', key: 'grade', type: 'text', required: false },
-                { label: 'Turma', key: 'classGroup', type: 'text', required: false },
               ].map(f => (
                 <label key={f.key}>
                   <span style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>{f.label}</span>
@@ -469,13 +479,28 @@ export default function Students() {
                   />
                 </label>
               ))}
+
               <label>
-                <span style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Turno</span>
-                <select value={form.shift} onChange={e => setForm({ ...form, shift: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)' }}>
-                  <option value="manhã">Manhã</option><option value="tarde">Tarde</option><option value="integral">Integral</option>
+                <span style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Série / Turma / Turno</span>
+                <select 
+                  required 
+                  value={`${form.grade}|${form.classGroup}|${form.shift}`} 
+                  onChange={e => {
+                    const [g, c, s] = e.target.value.split('|');
+                    setForm({ ...form, grade: g, classGroup: c, shift: s });
+                  }}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)', background: '#fff' }}
+                >
+                  <option value="||" disabled selected>Selecione no catálogo...</option>
+                  {schoolClasses.length === 0 && <option value="Sem Série|Sem Turma|manhã">Nenhuma turma cadastrada. Será salvo como padrão.</option>}
+                  {schoolClasses.map(c => (
+                    <option key={c.id} value={`${c.grade}|${c.classGroup}|${c.shift}`}>
+                      {c.grade} — Turma {c.classGroup} ({c.shift})
+                    </option>
+                  ))}
                 </select>
               </label>
+
               <button type="submit" style={{
                 padding: '10px 0', fontSize: 14, fontWeight: 700, color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', marginTop: 8,
                 background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-800))',
