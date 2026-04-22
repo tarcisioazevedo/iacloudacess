@@ -667,6 +667,8 @@ model SchoolMessagingChannel {
   lastDisconnectedAt DateTime?  @map("last_disconnected_at")
   lastSyncAt         DateTime?  @map("last_sync_at")
   lastError          String?    @map("last_error") @db.Text
+  enrollment         String?
+  accessId           String?    @map("access_id")
   isActive           Boolean    @default(true) @map("is_active")
   metadata           Json?
   createdBy          String?    @map("created_by")

@@ -70,19 +70,25 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
     }
   };
 
+  const [schoolClasses, setSchoolClasses] = useState<any[]>([]);
+
   const load = () => {
     setLoading(true);
-    fetch(`/api/students/${studentId}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => {
-        setStudent(d.student);
-        if (d.student) {
+    // Fetch both student data and available school classes for the dropdown
+    Promise.all([
+      fetch(`/api/students/${studentId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/school-classes`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+    ])
+      .then(([studentData, classesData]) => {
+        setStudent(studentData.student);
+        setSchoolClasses(classesData.classes || []);
+        if (studentData.student) {
           setEditForm({
-            name: d.student.name,
-            enrollment: d.student.enrollment,
-            grade: d.student.grade || '',
-            classGroup: d.student.classGroup || '',
-            shift: d.student.shift || 'manhã',
+            name: studentData.student.name,
+            enrollment: studentData.student.enrollment,
+            grade: studentData.student.grade || '',
+            classGroup: studentData.student.classGroup || '',
+            shift: studentData.student.shift || 'manhã',
           });
         }
       })
@@ -258,23 +264,62 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
                     <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Matrícula</label>
                     {isEditing ? <input value={editForm.enrollment} onChange={e => setEditForm({...editForm, enrollment: e.target.value})} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }} /> : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-mono)' }}>{student.enrollment}</div>}
                   </div>
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Série</label>
-                    {isEditing ? <input value={editForm.grade} onChange={e => setEditForm({...editForm, grade: e.target.value})} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }} /> : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4 }}>{student.grade || '—'}</div>}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Turma</label>
-                    {isEditing ? <input value={editForm.classGroup} onChange={e => setEditForm({...editForm, classGroup: e.target.value})} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }} /> : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4 }}>{student.classGroup || '—'}</div>}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Turno</label>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Série / Turma / Turno</label>
                     {isEditing ? (
-                      <select value={editForm.shift} onChange={e => setEditForm({...editForm, shift: e.target.value})} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}>
-                        <option value="manhã">Manhã</option><option value="tarde">Tarde</option><option value="integral">Integral</option>
+                      <select 
+                        value={`${editForm.grade}|${editForm.classGroup}|${editForm.shift}`} 
+                        onChange={e => {
+                          const [g, c, s] = e.target.value.split('|');
+                          setEditForm({ ...editForm, grade: g, classGroup: c, shift: s });
+                        }}
+                        style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13, background: '#fff' }}
+                      >
+                        <option value="||" disabled>Selecione uma turma do catálogo...</option>
+                        <option value={`${student.grade || ''}|${student.classGroup || ''}|${student.shift || ''}`}>Manter Atual: {student.grade || 'Sem série'} - {student.classGroup || 'Sem turma'} ({student.shift || 'Sem turno'})</option>
+                        {schoolClasses.map((c: any) => (
+                          <option key={c.id} value={`${c.grade}|${c.classGroup}|${c.shift}`}>
+                            {c.grade} — Turma {c.classGroup} ({c.shift})
+                          </option>
+                        ))}
                       </select>
-                    ) : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4 }}>{student.shift || '—'}</div>}
+                    ) : (
+                      <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4 }}>
+                        {student.grade || '—'} - {student.classGroup || '—'} ({student.shift || '—'})
+                      </div>
+                    )}
                   </div>
                 </div>
+              </div>
+
+              {/* Delete Area */}
+              <div style={{ marginTop: 24, padding: 16, background: 'var(--color-danger-50)', border: '1px solid var(--color-danger-200)', borderRadius: 'var(--radius-lg)' }}>
+                <h4 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--color-danger-800)' }}>Excluir Aluno</h4>
+                <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--color-danger-700)' }}>
+                  Atenção: A exclusão do aluno irá inativar seu cadastro e removerá seu acesso das catracas associadas.
+                </p>
+                <button 
+                  onClick={async () => {
+                    if (!window.confirm(`Tem certeza que deseja EXCLUIR o aluno ${student.name}?`)) return;
+                    const res = await fetch(`/api/students/${student.id}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                      onClose();
+                      onUpdate();
+                    } else {
+                      const err = await res.json();
+                      alert('Erro ao excluir aluno: ' + err.message);
+                    }
+                  }}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, fontWeight: 700, 
+                    background: 'var(--color-danger-600)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' 
+                  }}
+                >
+                  <Trash2 size={14} /> Excluir Permanentemente
+                </button>
               </div>
             </div>
           )}
