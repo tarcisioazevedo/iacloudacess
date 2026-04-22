@@ -133,7 +133,7 @@ services:
     # edoburu/pgbouncer aceita DATABASE_URL diretamente — sem pgbouncer.ini manual
     image: edoburu/pgbouncer:latest
     environment:
-      DATABASE_URL: postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/school_access
+      DATABASE_URL: postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:-schoolpass2026}@postgres:5432/school_access
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
       DEFAULT_POOL_SIZE: "20"
@@ -549,9 +549,9 @@ services:
       - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN:-global-secret-token}
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/evolution
+      - DATABASE_CONNECTION_URI=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:-schoolpass2026}@postgres:5432/evolution
       # DATABASE_URL = alias para Prisma interno da Evolution API (v2 lê ambas as variáveis)
-      - DATABASE_URL=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/evolution
+      - DATABASE_URL=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:-schoolpass2026}@postgres:5432/evolution
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
       # Fix for WhatsApp Baileys Web Socket closed error (count: 0 on QR Code)
       - CONFIG_SESSION_PHONE_VERSION=2.3000.1034074495
@@ -603,7 +603,7 @@ services:
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_USER=${DB_USER:-schooladmin}
-      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:-schoolpass2026}
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
