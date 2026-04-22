@@ -57,14 +57,9 @@ class AutoRegisterPresenceService {
     this.started = true;
 
     try {
-      if (redisGlobal.status !== 'ready') {
-        await redisGlobal.connect();
-      }
 
       this.subscriber = redisGlobal.duplicate();
-      if (this.subscriber.status !== 'ready') {
-        await this.subscriber.connect();
-      }
+
 
       await this.refreshSnapshot();
 
@@ -143,9 +138,7 @@ class AutoRegisterPresenceService {
     this.cache.delete(deviceId);
 
     try {
-      if (redisGlobal.status !== 'ready') {
-        await redisGlobal.connect();
-      }
+
       await redisGlobal.del(this.sessionKey(deviceId));
     } catch (err: any) {
       logger.warn('Failed to delete AutoRegister presence key', {
@@ -162,9 +155,7 @@ class AutoRegisterPresenceService {
 
   private async writeSession(session: AutoRegisterSessionPresence) {
     try {
-      if (redisGlobal.status !== 'ready') {
-        await redisGlobal.connect();
-      }
+
       await redisGlobal.set(
         this.sessionKey(session.deviceId),
         JSON.stringify(session),
@@ -181,9 +172,7 @@ class AutoRegisterPresenceService {
 
   private async publish(event: PresenceEvent) {
     try {
-      if (redisGlobal.status !== 'ready') {
-        await redisGlobal.connect();
-      }
+
       await redisGlobal.publish(this.channel, JSON.stringify(event));
     } catch (err: any) {
       logger.warn('Failed to publish AutoRegister presence event', {
@@ -211,9 +200,7 @@ class AutoRegisterPresenceService {
   }
 
   private async refreshSnapshot() {
-    if (redisGlobal.status !== 'ready') {
-      await redisGlobal.connect();
-    }
+
 
     const keys = await this.scanSessionKeys();
     if (keys.length === 0) {

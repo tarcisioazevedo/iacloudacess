@@ -358,10 +358,11 @@ export async function startDeviceHealthChecker() {
       },
     });
 
+    const { IntelbrasClient } = await import('../services/intelbrasClient');
+    const { autoRegisterPresenceService } = await import('../services/autoRegisterPresenceService');
+
     if (directDevicesToPing.length > 0) {
       console.log(`[DeviceHealth] Pinging ${directDevicesToPing.length} direct devices...`);
-      const { IntelbrasClient } = await import('../services/intelbrasClient');
-
       for (const device of directDevicesToPing) {
         if (!device.ipAddress) continue;
         try {
@@ -377,9 +378,28 @@ export async function startDeviceHealthChecker() {
       }
     }
 
+    // Process AutoRegister Cloud Devices
+    const autoRegDevices = await prisma.device.findMany({
+      where: { connectivityMode: 'cloud_autoregister' },
+      select: { id: true, status: true }
+    });
+
+    for (const dev of autoRegDevices) {
+      const isConnected = autoRegisterPresenceService.hasSession(dev.id);
+      const targetStatus = isConnected ? 'online' : 'offline';
+      if (dev.status !== targetStatus) {
+        await prisma.device.update({
+          where: { id: dev.id },
+          data: { status: targetStatus, ...(isConnected ? { lastHeartbeat: new Date() } : {}) }
+        });
+      }
+    }
+
+    // Process non-autoregister devices for unstable/offline fallback
     await prisma.device.updateMany({
       where: {
         status: 'online',
+        connectivityMode: { not: 'cloud_autoregister' },
         OR: [{ lastHeartbeat: { lt: fiveMinutesAgo } }, { lastHeartbeat: null }],
       },
       data: { status: 'unstable' },
@@ -388,6 +408,7 @@ export async function startDeviceHealthChecker() {
     await prisma.device.updateMany({
       where: {
         status: { in: ['online', 'unstable'] },
+        connectivityMode: { not: 'cloud_autoregister' },
         OR: [{ lastHeartbeat: { lt: thirtyMinutesAgo } }, { lastHeartbeat: null }],
       },
       data: { status: 'offline' },

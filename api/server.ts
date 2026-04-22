@@ -230,10 +230,10 @@ async function setupSocketRedisAdapter() {
     subClient.on('error', () => { /* ignore */ });
 
     if (pubClient.status !== 'ready') {
-      await pubClient.connect();
+      // await pubClient.connect();
     }
     if (subClient.status !== 'ready') {
-      await subClient.connect();
+      // await subClient.connect();
     }
 
     io.adapter(createAdapter(pubClient, subClient));
