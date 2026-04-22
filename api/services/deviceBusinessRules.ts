@@ -66,7 +66,7 @@ export async function checkDeviceOperationStatus(deviceId: string, prismaClient:
   }
 
   // 2. Verificação de bloqueio do integrador / licença
-  if (integrator.status !== 'active' || integrator.status === 'blocked') {
+  if (integrator.status !== 'active') {
     isIntegratorBlocked = true;
     reason = reason || 'O Integrador deste equipamento encontra-se suspenso.';
   } else if (!license || new Date(license.validTo) < new Date()) {

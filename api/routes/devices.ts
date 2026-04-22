@@ -153,7 +153,7 @@ router.get('/', async (req: Request, res: Response) => {
       const license = integrator?.licenses?.[0];
       
       const isSchoolBlocked = school?.billingStatus === 'blocked' || school?.status !== 'active';
-      const isIntegratorBlocked = integrator?.status !== 'active' || integrator?.status === 'blocked' || (!license) || new Date(license.validTo) < new Date();
+      const isIntegratorBlocked = integrator?.status !== 'active' || (!license) || new Date(license.validTo) < new Date();
       
       return {
         ...sanitized,

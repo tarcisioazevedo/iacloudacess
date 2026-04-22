@@ -441,7 +441,7 @@ export default function UserManagement({ isHubMode = false, hubSchoolId }: { isH
       {/* Modals */}
       {showCreate && (
         <CreateUserModal
-          token={token}
+          token={token!}
           callerRole={role}
           callerSchoolId={hubSchoolId || profile?.schoolId || null}
           callerIntegratorId={profile?.integratorId || null}

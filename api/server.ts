@@ -166,14 +166,14 @@ const autoregTcpServer = createTcpServer((socket: NetSocket) => {
       socket.setTimeout(0); // Disable timeout for long-lived tunnel
 
       // Look up device and hand off to tunnel service
-      resolveDeviceForAutoRegister(DeviceID).then(({ resolvedId }) => {
+      resolveDeviceForAutoRegister(DeviceID).then((result) => {
         const service = IntelbrasAutoRegisterService.getInstance();
         service.handleNewConnection(
           DeviceID,
           DevClass || 'unknown',
           ServerIP || socket.remoteAddress || '',
           socket,
-          resolvedId || undefined,
+          result.device?.id,
         ).catch((err) => {
           logger.error('[AutoRegister TCP] handleNewConnection failed', { error: err.message });
           socket.destroy();

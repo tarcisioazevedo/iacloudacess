@@ -64,7 +64,7 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), 
         guardian: {
           create: { name, phone: phone || null, email: email || null },
         },
-        studentId,
+        student: { connect: { id: studentId } },
         relation: relation || 'Outro',
         notifyEntry: true,
         notifyExit: true,
