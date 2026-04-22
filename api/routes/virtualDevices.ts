@@ -124,12 +124,31 @@ router.post(
           occurredAt: new Date(),
           rawPayload: { _virtual: true, _manual: true },
         },
+        include: {
+          student: {
+            select: {
+              name: true,
+              guardianLinks: {
+                include: { guardian: { select: { phone: true, email: true, name: true } } },
+              },
+            },
+          },
+        },
       });
 
       await prisma.device.update({
         where: { id: device.id },
         data: { lastEventAt: event.occurredAt, status: 'online', lastHeartbeat: new Date() },
       });
+
+      // Importar dinamicamente para evitar problemas circulares ou simplesmente requerer
+      const { triggerNotification } = await import('../services/n8nTrigger');
+      
+      if (resolvedStudentId && event.student) {
+        await triggerNotification(event as any).catch((err: any) =>
+          console.warn(`[VirtualSim] Notification pipeline error: ${err.message}`)
+        );
+      }
 
       return res.json({ message: 'Evento gerado com sucesso', event: { id: event.id, direction, method } });
     } catch (err: any) {
