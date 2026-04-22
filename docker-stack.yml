@@ -132,7 +132,7 @@ services:
   pgbouncer:
     # edoburu/pgbouncer aceita DATABASE_URL diretamente
     image: edoburu/pgbouncer:latest
-    entrypoint: /bin/sh -c "export DATABASE_URL=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/$${DB_NAME:-school_access}\" && exec /entrypoint.sh pgbouncer"
+    entrypoint: /bin/sh -c "export DATABASE_URL=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/$${DB_NAME:-school_access}\" && exec /entrypoint.sh pgbouncer /etc/pgbouncer/pgbouncer.ini"
     environment:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
