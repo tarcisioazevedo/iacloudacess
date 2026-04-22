@@ -38,7 +38,9 @@ function normalizeUrl(value: string): string {
 }
 
 export function getEvolutionApiUrl(): string {
-  return normalizeUrl(process.env.EVOLUTION_API_URL?.trim() || 'http://evolution-api:8080');
+  let url = process.env.EVOLUTION_API_URL?.trim() || 'http://127.0.0.1:8080';
+  url = url.replace('http://localhost:', 'http://127.0.0.1:');
+  return normalizeUrl(url);
 }
 
 export function getEvolutionApiToken(): string {

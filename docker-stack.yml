@@ -531,7 +531,7 @@ services:
 
   # ─── Evolution API (WhatsApp) ───────────────
   evolution-api:
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:v2.2.3
     environment:
       - SERVER_URL=https://evolution.${DOMAIN:-localhost}
       - CORS_ORIGIN=*
@@ -540,6 +540,9 @@ services:
       - LOG_LEVEL=ERROR,WARN
       - LOG_COLOR=false
       - LOG_BAILEYS=error
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379
+      - CACHE_REDIS_PREFIX_KEY=evolution
       - REDIS_ENABLED=true
       - REDIS_URI=redis://redis:6379
       - REDIS_PREFIX_KEY=evolution
@@ -550,6 +553,10 @@ services:
       # DATABASE_URL = alias para Prisma interno da Evolution API (v2 lê ambas as variáveis)
       - DATABASE_URL=postgresql://${DB_USER:-schooladmin}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/evolution
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+      # Fix for WhatsApp Baileys Web Socket closed error (count: 0 on QR Code)
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1034074495
+      # Fix for IPv6/IPv4 timeouts on some docker networks
+      - NODE_OPTIONS=--network-family-autoselection-attempt-timeout=1000
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store

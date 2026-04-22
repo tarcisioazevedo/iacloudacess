@@ -24,6 +24,12 @@ export function rateLimiter(options: RateLimitOptions = {}) {
   const windowSec = Math.ceil(windowMs / 1000);
 
   return async (req: Request, res: Response, next: NextFunction) => {
+    // Bypass para testes locais (prevenir lockout no auto-refresh de componentes)
+    const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+    if (process.env.NODE_ENV !== 'production' && isLocalhost) {
+      return next();
+    }
+
     const rawKey = keyFn(req);
     const redisKey = `rl:${rawKey}`;
 

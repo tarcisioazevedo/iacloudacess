@@ -338,8 +338,17 @@ router.post('/messaging/whatsapp/refresh', requireRole('superadmin', 'integrator
       return res.status(404).json({ message: 'Canal WhatsApp ainda nao configurado para esta escola' });
     }
 
-    const connect = await connectEvolutionInstance(channel.instanceName);
-    const snapshot = await syncEvolutionInstance(channel.instanceName).catch(() => null);
+    let connect = await connectEvolutionInstance(channel.instanceName);
+    let snapshot = await syncEvolutionInstance(channel.instanceName).catch(() => null);
+
+    // Se não gerou QR e não está conectado, a instância pode estar morta/stuck. Forçar reinício.
+    const hasQrOrCode = !!(connect.qrCodePayload || connect.pairingCode);
+    if (!hasQrOrCode && snapshot?.connectionState !== 'open') {
+      const restarted = await restartEvolutionInstance(channel.instanceName);
+      snapshot = restarted.snapshot;
+      connect = restarted.connect;
+    }
+
     const updatedChannel = await persistChannelState({
       school,
       actorId: req.user?.profileId,
