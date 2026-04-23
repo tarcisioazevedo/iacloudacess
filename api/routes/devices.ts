@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { deviceTenantWhere, schoolUnitTenantWhere } from '../middleware/tenant';
@@ -10,6 +10,7 @@ import {
   normalizeDeviceConnectionPolicy,
   resolveDeviceTransport,
 } from '../services/deviceTransport';
+import { getDeviceClient } from '../services/deviceClientFactory';
 
 const router = Router();
 router.use(requireAuth);
@@ -408,5 +409,43 @@ router.delete('/:id', requireRole('integrator_admin', 'integrator_support', 'sup
     return res.status(500).json({ message: err.message });
   }
 });
+
+// ─── HARDWARE ACTIONS ─────────────────────────
+
+async function executeDeviceAction(req: Request, res: Response, actionName: string, actionFn: (client: any) => Promise<any>) {
+  try {
+    const device = await prisma.device.findFirst({
+      where: { id: req.params.id, ...deviceTenantWhere(req.user) },
+      include: { edgeConnector: true }
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+    
+    const client = getDeviceClient(device as any);
+    const result = await actionFn(client);
+    return res.json({ message: `Ação ${actionName} concluída com sucesso`, data: result });
+  } catch (err: any) {
+    return res.status(500).json({ message: `Erro ao executar ${actionName}: ${err.message}` });
+  }
+}
+
+router.post('/:id/reboot', requireRole('superadmin', 'integrator_admin'), (req, res) => 
+  executeDeviceAction(req, res, 'Reboot', client => client.reboot())
+);
+
+router.post('/:id/wipe-users', requireRole('superadmin', 'integrator_admin'), (req, res) => 
+  executeDeviceAction(req, res, 'Wipe Users', client => client.wipeUsers())
+);
+
+router.post('/:id/wipe-faces', requireRole('superadmin', 'integrator_admin'), (req, res) => 
+  executeDeviceAction(req, res, 'Wipe Faces', client => client.wipeFaces())
+);
+
+router.post('/:id/sync-time', requireRole('superadmin', 'integrator_admin', 'integrator_support'), (req, res) => 
+  executeDeviceAction(req, res, 'Sync Time', client => client.setCurrentTime(new Date()))
+);
+
+router.get('/:id/firmware', requireRole('superadmin', 'integrator_admin', 'integrator_support'), (req, res) => 
+  executeDeviceAction(req, res, 'Get Firmware', client => client.getSoftwareVersion())
+);
 
 export default router;

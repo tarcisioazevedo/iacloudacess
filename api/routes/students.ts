@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import crypto from 'crypto';
@@ -89,7 +89,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/students
 router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), auditMiddleware('CREATE', 'Student'), async (req: Request, res: Response) => {
   try {
-    const { name, enrollment, grade, classGroup, shift, schoolId } = req.body;
+    const { name, accessId: manualAccessId, enrollment, grade, classGroup, shift, schoolId } = req.body;
 
     // ── Input validation ──────────────────────────────────────────
     const errors: string[] = [];
@@ -128,7 +128,7 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), 
     }
 
     // ── Generate unique accessId for device sync ──────────────────
-    const accessId = generateAccessId();
+    const accessId = manualAccessId?.trim() || generateAccessId();
 
     const student = await prisma.student.create({
       data: {

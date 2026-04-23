@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users, Building2, GraduationCap, Filter, X, Trash2, Activity, Power, Link2, MoreVertical, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
@@ -282,7 +282,7 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
     if (!window.confirm(`Tem certeza que deseja reiniciar o dispositivo "${deviceName}"?\n\nO equipamento ficará offline por alguns segundos durante o processo.`)) return;
     setRebooting(deviceId);
     try {
-      const response = await fetch(`/api/device-sync/${deviceId}/reboot`, {
+      const response = await fetch(`/api/devices/${deviceId}/reboot`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -322,13 +322,21 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
     }
     setSyncing(deviceId);
     try {
-      const response = await fetch(`/api/device-sync/${deviceId}/wipe`, {
+      let response = await fetch(`/api/devices/${deviceId}/wipe-users`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await response.json();
+      let data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      alert(data.message || 'Comandos de limpeza (wipe) enviados com sucesso.');
+      
+      response = await fetch(`/api/devices/${deviceId}/wipe-faces`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      alert('Comandos de limpeza (wipe) enviados com sucesso.');
     } catch (err: any) {
       alert(err.message || 'Erro ao executar wipe');
     }
@@ -359,7 +367,7 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
 
   const handleSyncTime = async (deviceId: string) => {
     try {
-      const response = await fetch(`/api/device-sync/${deviceId}/sync-time`, {
+      const response = await fetch(`/api/devices/${deviceId}/sync-time`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -373,14 +381,14 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
 
   const fetchDiagnostics = async (deviceId: string) => {
     try {
-      const response = await fetch(`/api/device-sync/${deviceId}/diagnostics`, {
+      const response = await fetch(`/api/devices/${deviceId}/firmware`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      if (response.ok && data.firmwareVersion) {
+      if (response.ok && data.data) {
         setPingResults(prev => ({ 
           ...prev, 
-          [deviceId]: { ...prev[deviceId], status: 'online', deviceInfo: data.firmwareVersion } 
+          [deviceId]: { ...prev[deviceId], status: 'online', deviceInfo: data.data } 
         }));
       }
     } catch (err: any) {

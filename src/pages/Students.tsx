@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Search, GraduationCap, X, Upload, FileSpreadsheet, Camera, CheckCircle, AlertTriangle, Download, ChevronRight } from 'lucide-react';
 import StudentPanel from '../components/students/StudentPanel';
@@ -280,7 +280,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
   const [showImport, setShowImport] = useState(false);
   const [photoTarget, setPhotoTarget] = useState<Student | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' });
+  const [form, setForm] = useState({ name: '', accessId: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' });
   const [loading, setLoading] = useState(true);
   const [schoolClasses, setSchoolClasses] = useState<any[]>([]);
 
@@ -304,7 +304,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
     e.preventDefault();
     const payload = { ...form, schoolId: hubSchoolId || undefined };
     await fetch('/api/students', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) });
-    setShowForm(false); setForm({ name: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' }); load();
+    setShowForm(false); setForm({ name: '', accessId: '', enrollment: '', grade: '', classGroup: '', shift: 'manhã' }); load();
   };
 
   return (
@@ -478,6 +478,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
                 { label: 'Nome completo', key: 'name', type: 'text', required: true },
+                { label: 'ID Acesso / Catraca (Opcional - Auto-gerado se vazio)', key: 'accessId', type: 'text', required: false },
                 { label: 'Matrícula (opcional)', key: 'enrollment', type: 'text', required: false },
               ].map(f => (
                 <label key={f.key}>

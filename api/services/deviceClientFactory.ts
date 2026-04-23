@@ -61,6 +61,30 @@ class LocalAutoRegisterProxyClient {
     }
   }
 
+  async getSoftwareVersion(): Promise<string> {
+    const result = await this.cgiRequest('GET', '/cgi-bin/magicBox.cgi?action=getSoftwareVersion');
+    return String(result).trim();
+  }
+
+  async setCurrentTime(date: Date): Promise<void> {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const formattedTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    await this.cgiRequest('GET', `/cgi-bin/global.cgi?action=setCurrentTime&time=${encodeURIComponent(formattedTime)}`);
+  }
+
+  async wipeUsers(): Promise<void> {
+    await this.cgiRequest('GET', '/cgi-bin/recordUpdater.cgi?action=clear&name=AccessControlCard');
+  }
+
+  async wipeFaces(): Promise<void> {
+    await this.cgiRequest('GET', '/cgi-bin/AccessFace.cgi?action=removeAll');
+  }
+
   async downloadFile(fileName: string) {
     const safeFileName = encodeURIComponent(fileName).replace(/%2F/g, '/');
     return this.cgiBinaryRequest(
@@ -168,6 +192,30 @@ class InternalAutoRegisterProxyClient {
     }
   }
 
+  async getSoftwareVersion(): Promise<string> {
+    const result = await this.cgiRequest('GET', '/cgi-bin/magicBox.cgi?action=getSoftwareVersion');
+    return String(result).trim();
+  }
+
+  async setCurrentTime(date: Date): Promise<void> {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const formattedTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    await this.cgiRequest('GET', `/cgi-bin/global.cgi?action=setCurrentTime&time=${encodeURIComponent(formattedTime)}`);
+  }
+
+  async wipeUsers(): Promise<void> {
+    await this.cgiRequest('GET', '/cgi-bin/recordUpdater.cgi?action=clear&name=AccessControlCard');
+  }
+
+  async wipeFaces(): Promise<void> {
+    await this.cgiRequest('GET', '/cgi-bin/AccessFace.cgi?action=removeAll');
+  }
+
   async downloadFile(fileName: string) {
     const safeFileName = encodeURIComponent(fileName).replace(/%2F/g, '/');
     return this.cgiBinaryRequest(
@@ -187,7 +235,7 @@ function buildCloudAutoRegisterClient(deviceId: string) {
 
 export type DeviceClientShape = Pick<
   IntelbrasClient,
-  'insertUsers' | 'insertFaces' | 'removeUser' | 'removeFace' | 'getDeviceInfo' | 'heartbeat' | 'downloadFile' | 'reboot'
+  'insertUsers' | 'insertFaces' | 'removeUser' | 'removeFace' | 'getDeviceInfo' | 'heartbeat' | 'downloadFile' | 'reboot' | 'getSoftwareVersion' | 'setCurrentTime' | 'wipeUsers' | 'wipeFaces'
 >;
 
 export function getDeviceClient(device: {
