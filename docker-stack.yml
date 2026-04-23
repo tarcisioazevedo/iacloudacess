@@ -113,8 +113,8 @@ services:
         max_attempts: 10
     healthcheck:
       # Checar apenas se o servidor aceita conexões (não checar DB específico)
-      # O DB school_access é criado pelo POSTGRES_DB no primeiro init
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-schooladmin} -d ${POSTGRES_DB:-school_access}"]
+      # Executar o healthcheck como usuário `postgres` (superuser) pela rede local para evitar erros de senha
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-school_access}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -132,7 +132,7 @@ services:
   pgbouncer:
     # edoburu/pgbouncer não lê DB_PASSWORD_FILE para montar a userlist, precisamos exportar DB_PASSWORD no entrypoint
     image: edoburu/pgbouncer:latest
-    entrypoint: /bin/sh -c "export DB_PASSWORD=$$(cat /run/secrets/db_password) && exec /entrypoint.sh /etc/pgbouncer/pgbouncer.ini"
+    entrypoint: /bin/sh -c "export DB_PASSWORD=$$(cat /run/secrets/db_password) && exec /entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini"
     environment:
       DB_USER: ${DB_USER:-schooladmin}
       DB_HOST: postgres
