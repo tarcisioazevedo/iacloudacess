@@ -478,7 +478,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
                 { label: 'Nome completo', key: 'name', type: 'text', required: true },
-                { label: 'ID Acesso / Catraca (Opcional - Auto-gerado se vazio)', key: 'accessId', type: 'text', required: false },
+                { label: 'ID Acesso / Catraca (Apenas Números - Auto-gerado se vazio)', key: 'accessId', type: 'text', required: false },
                 { label: 'Matrícula (opcional)', key: 'enrollment', type: 'text', required: false },
               ].map(f => (
                 <label key={f.key}>

@@ -10,9 +10,9 @@ import { validateAndOptimizePhoto } from '../services/photoValidator';
 import { logger } from '../lib/logger';
 import { auditMiddleware } from '../middleware/auditLogger';
 
-/** Generate a unique accessId for device synchronization */
+/** Generate a unique numeric accessId for device synchronization (Intelbras requires numeric) */
 function generateAccessId(): string {
-  return 'acc_' + crypto.randomBytes(4).toString('hex');
+  return Math.floor(10000000 + Math.random() * 90000000).toString();
 }
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -127,8 +127,9 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), 
       }
     }
 
-    // ── Generate unique accessId for device sync ──────────────────
-    const accessId = manualAccessId?.trim() || generateAccessId();
+    // ── Generate unique accessId for device sync (Intelbras requires numeric) ──
+    const sanitizedManualId = manualAccessId ? manualAccessId.replace(/\D/g, '') : null;
+    const accessId = sanitizedManualId || generateAccessId();
 
     const student = await prisma.student.create({
       data: {
