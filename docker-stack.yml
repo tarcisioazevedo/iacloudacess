@@ -114,7 +114,7 @@ services:
     healthcheck:
       # Checar apenas se o servidor aceita conexões (não checar DB específico)
       # O DB school_access é criado pelo POSTGRES_DB no primeiro init
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-schooladmin}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-schooladmin} -d ${POSTGRES_DB:-school_access}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -132,7 +132,7 @@ services:
   pgbouncer:
     # edoburu/pgbouncer aceita DATABASE_URL diretamente
     image: edoburu/pgbouncer:latest
-    entrypoint: /bin/sh -c "export DATABASE_URL=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/$${DB_NAME:-school_access}\" && exec /entrypoint.sh pgbouncer /etc/pgbouncer/pgbouncer.ini"
+    entrypoint: /bin/sh -c "export DATABASE_URL=\"postgresql://$${DB_USER:-schooladmin}:$$(cat /run/secrets/db_password)@postgres:5432/$${DB_NAME:-school_access}\" && exec /entrypoint.sh /etc/pgbouncer/pgbouncer.ini"
     environment:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
