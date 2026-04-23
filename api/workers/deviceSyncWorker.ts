@@ -85,19 +85,30 @@ export function startDeviceSyncWorker() {
           break;
         }
         case 'face_remove': {
-          await client.removeFace(payload.UserID);
+          if (payload.action === 'clearAll') {
+            await client.wipeFaces();
+          } else {
+            await client.removeFace(payload.UserID);
+          }
           break;
         }
         case 'user_remove': {
-          // P1 FIX: Complete removal — remove face first, then user record
-          await client.removeFace(payload.UserID).catch(() => undefined);
-          await client.removeUser(payload.UserID);
+          if (payload.action === 'clearAll') {
+            await client.wipeUsers();
+            await prisma.deviceStudentLink.deleteMany({
+              where: { deviceId: device.id },
+            });
+          } else {
+            // P1 FIX: Complete removal — remove face first, then user record
+            await client.removeFace(payload.UserID).catch(() => undefined);
+            await client.removeUser(payload.UserID);
 
-          // Mark device-student link as removed
-          await prisma.deviceStudentLink.updateMany({
-            where: { deviceId: device.id, userId: String(payload.UserID) },
-            data: { syncStatus: 'removed' },
-          });
+            // Mark device-student link as removed
+            await prisma.deviceStudentLink.updateMany({
+              where: { deviceId: device.id, userId: String(payload.UserID) },
+              data: { syncStatus: 'removed' },
+            });
+          }
           break;
         }
         default:

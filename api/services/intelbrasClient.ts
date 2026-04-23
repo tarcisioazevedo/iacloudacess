@@ -251,4 +251,58 @@ export class IntelbrasClient {
       return { online: false, data: null };
     }
   }
+  /**
+   * Obtém a versão do firmware e outros dados do equipamento
+   */
+  async getSoftwareVersion(): Promise<string> {
+    try {
+      const result = await this.request('GET', '/cgi-bin/magicBox.cgi?action=getSoftwareVersion');
+      return String(result).trim();
+    } catch (err: any) {
+      throw new Error(`Failed to get software version: ${err.message}`);
+    }
+  }
+
+  /**
+   * Sincroniza a data e hora atual do dispositivo com o servidor
+   * Formato exigido: YYYY-MM-DD HH:mm:ss
+   */
+  async setCurrentTime(date: Date): Promise<void> {
+    try {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      const formattedTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      
+      const payload = `time=${formattedTime}`;
+      await this.request('POST', '/cgi-bin/global.cgi?action=setCurrentTime', payload);
+    } catch (err: any) {
+      throw new Error(`Failed to set current time: ${err.message}`);
+    }
+  }
+
+  /**
+   * Remove TODOS os usuários do equipamento (Wipe)
+   */
+  async wipeUsers(): Promise<void> {
+    try {
+      await this.request('GET', '/cgi-bin/recordUpdater.cgi?action=clear&name=AccessControlCard');
+    } catch (err: any) {
+      throw new Error(`Failed to wipe users: ${err.message}`);
+    }
+  }
+
+  /**
+   * Remove TODAS as faces do equipamento (Wipe)
+   */
+  async wipeFaces(): Promise<void> {
+    try {
+      await this.request('GET', '/cgi-bin/AccessFace.cgi?action=removeAll');
+    } catch (err: any) {
+      throw new Error(`Failed to wipe faces: ${err.message}`);
+    }
+  }
 }

@@ -179,7 +179,7 @@ router.post('/:deviceId/auto-link', requireRole('school_admin', 'integrator_admi
     // Create links + sync jobs
     let linked = 0;
     for (const student of unlinked) {
-      const userId = `stu_${student.id.slice(0, 8)}`;
+      const userId = student.accessId;
       await prisma.deviceStudentLink.create({
         data: { deviceId, studentId: student.id, userId, syncStatus: 'pending' },
       });
@@ -232,6 +232,177 @@ router.post('/:deviceId/auto-link', requireRole('school_admin', 'integrator_admi
       deliveryMode: transport.deliveryMode,
       transport,
     });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/device-sync/:deviceId/restore — Restore all school students to this device (Wipe links + Auto-Link)
+router.post('/:deviceId/restore', requireRole('superadmin', 'integrator_admin'), async (req: Request, res: Response) => {
+  try {
+    const { deviceId } = req.params;
+
+    const operationStatus = await checkDeviceOperationStatus(deviceId);
+    if (!operationStatus.ok) {
+      return res.status(403).json({ message: operationStatus.reason });
+    }
+
+    const device = await prisma.device.findFirst({
+      where: { id: deviceId, ...deviceTenantWhere(req.user) },
+      include: { schoolUnit: true },
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+    const transport = resolveDeviceTransport(device);
+
+    // Wipe links locally
+    await prisma.deviceStudentLink.deleteMany({ where: { deviceId } });
+    await prisma.deviceSyncJob.deleteMany({ where: { deviceId, status: 'pending' } });
+
+    // Enqueue wipe jobs for the device
+    await prisma.deviceSyncJob.create({
+      data: { deviceId, syncType: 'user_remove', status: 'pending', payload: { action: 'clearAll' } },
+    });
+    await prisma.deviceSyncJob.create({
+      data: { deviceId, syncType: 'face_remove', status: 'pending', payload: { action: 'clearAll' } },
+    });
+
+    // Find all active students for this school
+    const students = await prisma.student.findMany({
+      where: { schoolId: device.schoolUnit.schoolId, status: 'active' },
+      include: { photo: { select: { base64Optimized: true } } },
+    });
+
+    // Create links + sync jobs
+    let linked = 0;
+    for (const student of students) {
+      const userId = student.accessId;
+      await prisma.deviceStudentLink.create({
+        data: { deviceId, studentId: student.id, userId, syncStatus: 'pending' },
+      });
+
+      // Create user sync job
+      await prisma.deviceSyncJob.create({
+        data: {
+          deviceId, syncType: 'user_insert', status: 'pending',
+          payload: {
+            UserID: userId, UserName: student.name, UserType: 0,
+            Doors: [0], TimeSections: [255],
+            ValidFrom: '2026-01-01 00:00:00', ValidTo: '2037-12-31 23:59:59',
+          },
+        },
+      });
+
+      // Create face sync job if photo exists
+      if (student.photo?.base64Optimized) {
+        await prisma.deviceSyncJob.create({
+          data: {
+            deviceId, syncType: 'face_insert', status: 'pending',
+            payload: { UserID: userId, PhotoData: student.photo.base64Optimized },
+          },
+        });
+      }
+      linked++;
+    }
+
+    // Enqueue direct sync jobs if cloud
+    if (transport.deliveryMode === 'cloud') {
+      const pendingJobs = await prisma.deviceSyncJob.findMany({
+        where: { deviceId, status: 'pending' },
+        select: { id: true },
+      });
+      await Promise.all(
+        pendingJobs.map(j =>
+          deviceSyncQueue.add('device-sync', { syncJobId: j.id }, {
+            attempts: 5, backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: 100, removeOnFail: 500,
+          }),
+        ),
+      );
+    }
+
+    return res.json({
+      message: `${linked} alunos reenviados ao dispositivo com sucesso`,
+      linked,
+      deliveryMode: transport.deliveryMode,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/device-sync/:deviceId/wipe — Wipe device completely
+router.post('/:deviceId/wipe', requireRole('superadmin', 'integrator_admin'), async (req: Request, res: Response) => {
+  try {
+    const { deviceId } = req.params;
+
+    const operationStatus = await checkDeviceOperationStatus(deviceId);
+    if (!operationStatus.ok) {
+      return res.status(403).json({ message: operationStatus.reason });
+    }
+
+    const device = await prisma.device.findFirst({
+      where: { id: deviceId, ...deviceTenantWhere(req.user) },
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+    const transport = resolveDeviceTransport(device);
+
+    await prisma.deviceStudentLink.deleteMany({ where: { deviceId } });
+    await prisma.deviceSyncJob.deleteMany({ where: { deviceId, status: 'pending' } });
+
+    await prisma.deviceSyncJob.create({
+      data: { deviceId, syncType: 'user_remove', status: 'pending', payload: { action: 'clearAll' } },
+    });
+    await prisma.deviceSyncJob.create({
+      data: { deviceId, syncType: 'face_remove', status: 'pending', payload: { action: 'clearAll' } },
+    });
+
+    if (transport.deliveryMode === 'cloud') {
+      const pendingJobs = await prisma.deviceSyncJob.findMany({
+        where: { deviceId, status: 'pending' },
+        select: { id: true },
+      });
+      await Promise.all(
+        pendingJobs.map(j =>
+          deviceSyncQueue.add('device-sync', { syncJobId: j.id }, {
+            attempts: 5, removeOnComplete: 100, removeOnFail: 500,
+          }),
+        ),
+      );
+    }
+
+    return res.json({ message: 'Wipe commands enqueued successfully' });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/device-sync/:deviceId/diagnostics — Get Firmware Version
+router.get('/:deviceId/diagnostics', requireRole('superadmin', 'integrator_admin', 'school_admin'), async (req: Request, res: Response) => {
+  try {
+    const device = await prisma.device.findFirst({
+      where: { id: req.params.deviceId, ...deviceTenantWhere(req.user) },
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+
+    const client = await getDeviceClient(device.id);
+    const version = await client.getSoftwareVersion();
+    return res.json({ firmwareVersion: version });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/device-sync/:deviceId/sync-time — Sync Clock
+router.post('/:deviceId/sync-time', requireRole('superadmin', 'integrator_admin', 'school_admin'), async (req: Request, res: Response) => {
+  try {
+    const device = await prisma.device.findFirst({
+      where: { id: req.params.deviceId, ...deviceTenantWhere(req.user) },
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+
+    const client = await getDeviceClient(device.id);
+    await client.setCurrentTime(new Date());
+    return res.json({ message: 'Relógio sincronizado com sucesso' });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -298,6 +469,71 @@ router.post('/:deviceId/ping', requireRole('integrator_admin', 'integrator_suppo
         error: err.message,
       });
     }
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/device-sync/:deviceId/reboot — Remote reboot device
+router.post('/:deviceId/reboot', requireRole('integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
+  try {
+    const { deviceId } = req.params;
+
+    const operationStatus = await checkDeviceOperationStatus(deviceId);
+    if (!operationStatus.ok) {
+      return res.status(403).json({ message: operationStatus.reason });
+    }
+
+    const device = await prisma.device.findFirst({
+      where: { id: deviceId, ...deviceTenantWhere(req.user) },
+      include: {
+        edgeConnector: { select: { id: true, name: true, status: true } },
+      },
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+
+    const transport = resolveDeviceTransport(device);
+    if (transport.deliveryMode === 'unavailable') {
+      return res.status(409).json({ message: 'Dispositivo indisponível: ' + transport.reason });
+    }
+    if (transport.deliveryMode === 'edge') {
+      return res.status(409).json({ message: 'Reboot remoto não suportado via edge local. Use o edge para acesso direto.' });
+    }
+
+    const client = getDeviceClient(device);
+    await client.reboot();
+
+    await prisma.device.update({
+      where: { id: device.id },
+      data: { status: 'offline' },
+    });
+
+    return res.json({ message: 'Comando de reboot enviado com sucesso. O dispositivo ficará offline por alguns segundos.' });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/device-sync/:deviceId/device-info — Get device hardware info
+router.get('/:deviceId/device-info', requireRole('integrator_admin', 'integrator_support', 'superadmin'), async (req: Request, res: Response) => {
+  try {
+    const device = await prisma.device.findFirst({
+      where: { id: req.params.deviceId, ...deviceTenantWhere(req.user) },
+      include: {
+        edgeConnector: { select: { id: true, name: true, status: true } },
+      },
+    });
+    if (!device) return res.status(404).json({ message: 'Dispositivo não encontrado' });
+
+    const transport = resolveDeviceTransport(device);
+    if (transport.deliveryMode === 'unavailable') {
+      return res.status(409).json({ message: 'Dispositivo indisponível: ' + transport.reason });
+    }
+
+    const client = getDeviceClient(device);
+    const info = await client.getDeviceInfo();
+
+    return res.json({ deviceInfo: info, transport });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }

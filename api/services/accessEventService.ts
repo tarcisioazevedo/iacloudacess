@@ -50,22 +50,22 @@ export async function persistAccessEvent(input: PersistAccessEventInput) {
     if (link) {
       studentId = link.studentId;
     } else {
-      // Fallback: Tenta achar o aluno cuja matrícula seja igual ao userIdRaw recebido do dispositivo
-      const studentByEnrollment = await prisma.student.findFirst({
+      // Fallback: Tenta achar o aluno cujo accessId seja igual ao userIdRaw recebido do dispositivo
+      const studentByAccessId = await prisma.student.findFirst({
         where: { 
           schoolId: input.schoolId, 
-          enrollment: String(input.userIdRaw) 
+          accessId: String(input.userIdRaw) 
         }
       });
       
-      if (studentByEnrollment) {
-        studentId = studentByEnrollment.id;
+      if (studentByAccessId) {
+        studentId = studentByAccessId.id;
         
-        // Opcional: auto-vincular para futuras leituras ficarem mais rápidas
+        // Auto-vincular para futuras leituras ficarem mais rápidas
         await prisma.deviceStudentLink.create({
           data: {
             deviceId: input.deviceId,
-            studentId: studentByEnrollment.id,
+            studentId: studentByAccessId.id,
             userId: String(input.userIdRaw),
             syncStatus: 'synced'
           }

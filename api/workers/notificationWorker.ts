@@ -50,7 +50,7 @@ async function resolveTargetInstance(schoolId?: string | null) {
 }
 
 async function processDispatchNotifications(payload: any) {
-  const { eventId, schoolId, studentName, enrollment, direction, occurredAt, guardians, method, deviceLocation, photoUrl, allowPhotoConfig } = payload;
+  const { eventId, schoolId, schoolName, studentName, enrollment, direction, occurredAt, guardians, method, deviceLocation, photoUrl, base64Photo, allowPhotoConfig, whatsappTemplate } = payload;
 
   const actionText = direction === 'entry' ? 'entrou na' : 'saiu da';
   const timeText = new Date(occurredAt).toLocaleTimeString('pt-BR', {
@@ -72,14 +72,34 @@ async function processDispatchNotifications(payload: any) {
       continue;
     }
 
-    const message = `*IA Cloud Access*\n\nOlá ${guardian.name},\n\nRegistramos que o(a) aluno(a) *${studentName}* (Matrícula: ${enrollment || 'N/A'}) ${actionText} instalação *${deviceLocation}* em ${dateText} às ${timeText}.\n\nMétodo: ${method}\n\nEste é um aviso automático.`;
+    // Default message or Custom Template
+    let message = '';
+    if (whatsappTemplate) {
+      message = whatsappTemplate
+        .replace(/{{guardianName}}/g, guardian.name || '')
+        .replace(/{{studentName}}/g, studentName || '')
+        .replace(/{{enrollment}}/g, enrollment || '')
+        .replace(/{{actionText}}/g, actionText)
+        .replace(/{{deviceLocation}}/g, deviceLocation || '')
+        .replace(/{{dateText}}/g, dateText)
+        .replace(/{{timeText}}/g, timeText)
+        .replace(/{{method}}/g, method || '')
+        .replace(/{{schoolName}}/g, schoolName || '');
+    } else {
+      message = `*IA Cloud Access*\n\nOlá ${guardian.name},\n\nRegistramos que o(a) aluno(a) *${studentName}* (Matrícula: ${enrollment || 'N/A'}) ${actionText} instalação *${deviceLocation}* em ${dateText} às ${timeText}.\n\nMétodo: ${method}\n\nEste é um aviso automático.`;
+    }
 
-    const canAttemptPhoto = allowPhotoConfig && guardian.allowPhoto && photoUrl;
+    const canAttemptPhoto = allowPhotoConfig && guardian.allowPhoto && (photoUrl || base64Photo);
 
     try {
       if (canAttemptPhoto) {
-        const signedUrl = await getSignedUrl(photoUrl, 900); // 15 min validity
-        await sendEvolutionMedia(target.instanceName, guardian.phone, signedUrl, message);
+        let mediaData = '';
+        if (base64Photo) {
+          mediaData = `data:image/jpeg;base64,${base64Photo}`;
+        } else {
+          mediaData = await getSignedUrl(photoUrl, 900); // 15 min validity
+        }
+        await sendEvolutionMedia(target.instanceName, guardian.phone, mediaData, message);
       } else {
         await sendEvolutionText(target.instanceName, guardian.phone, message);
       }

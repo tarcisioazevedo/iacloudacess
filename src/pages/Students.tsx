@@ -4,7 +4,7 @@ import { Users, Plus, Search, GraduationCap, X, Upload, FileSpreadsheet, Camera,
 import StudentPanel from '../components/students/StudentPanel';
 
 interface Student {
-  id: string; name: string; enrollment: string; grade: string; classGroup: string; shift: string; status: string;
+  id: string; name: string; accessId: string; enrollment: string | null; grade: string; classGroup: string; shift: string; status: string;
   photo?: { storagePath: string; validationStatus: string };
   deviceLinks?: { syncStatus: string }[];
   school?: { name: string };
@@ -297,7 +297,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
   };
   useEffect(load, [token, hubSchoolId]);
 
-  const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.enrollment.includes(search));
+  const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.enrollment || '').includes(search) || s.accessId.includes(search));
   const photoStats = { total: students.length, withPhoto: students.filter(s => s.photo).length };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -389,7 +389,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-              {['Aluno', 'Matrícula', 'Série', 'Turma', 'Turno', 'Foto', 'Sync', 'Ações', ''].map((h, i) => (
+              {['Aluno', 'ID Acesso', 'Matrícula', 'Série', 'Turma', 'Turno', 'Foto', 'Sync', 'Ações', ''].map((h, i) => (
                 <th key={i} style={{ textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
               ))}
             </tr>
@@ -417,7 +417,15 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
                     </div>
                   </div>
                 </td>
-                <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.enrollment}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+                    background: 'var(--color-primary-50)', color: 'var(--color-primary-700)',
+                    padding: '3px 8px', borderRadius: 'var(--radius-sm)', letterSpacing: '0.02em',
+                    border: '1px solid var(--color-primary-200)',
+                  }}>{s.accessId}</span>
+                </td>
+                <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.enrollment || '—'}</td>
                 <td style={{ padding: '12px 16px' }}>{s.grade || '—'}</td>
                 <td style={{ padding: '12px 16px' }}><span className="badge badge-neutral">{s.classGroup || '—'}</span></td>
                 <td style={{ padding: '12px 16px' }}>{s.shift || '—'}</td>
@@ -470,7 +478,7 @@ export default function Students({ isHubMode = false, hubSchoolId }: { isHubMode
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
                 { label: 'Nome completo', key: 'name', type: 'text', required: true },
-                { label: 'Matrícula', key: 'enrollment', type: 'text', required: true },
+                { label: 'Matrícula (opcional)', key: 'enrollment', type: 'text', required: false },
               ].map(f => (
                 <label key={f.key}>
                   <span style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>{f.label}</span>

@@ -86,7 +86,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // PUT /api/schools/:id — Update school config
 router.put('/:id', requireRole('superadmin', 'integrator_admin'), async (req: Request, res: Response) => {
   try {
-    const { allowPhotoNotifications } = req.body;
+    const { allowPhotoNotifications, whatsappTemplate } = req.body;
     
     const school = await prisma.school.findFirst({
       where: { AND: [{ id: req.params.id }, schoolTenantWhere(req.user)] },
@@ -98,6 +98,7 @@ router.put('/:id', requireRole('superadmin', 'integrator_admin'), async (req: Re
       where: { id: school.id },
       data: {
         ...(allowPhotoNotifications !== undefined && { allowPhotoNotifications }),
+        ...(whatsappTemplate !== undefined && { whatsappTemplate }),
       },
     });
 

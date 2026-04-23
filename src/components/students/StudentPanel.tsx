@@ -21,7 +21,7 @@ interface GuardianLink {
 }
 
 interface StudentFull {
-  id: string; name: string; enrollment: string; grade: string; classGroup: string; shift: string; status: string;
+  id: string; name: string; accessId: string; enrollment: string | null; grade: string; classGroup: string; shift: string; status: string;
   photo?: { storagePath: string; validationStatus: string };
   school?: { name: string; slug: string };
   guardianLinks?: GuardianLink[];
@@ -85,7 +85,7 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
         if (studentData.student) {
           setEditForm({
             name: studentData.student.name,
-            enrollment: studentData.student.enrollment,
+            enrollment: studentData.student.enrollment || '',
             grade: studentData.student.grade || '',
             classGroup: studentData.student.classGroup || '',
             shift: studentData.student.shift || 'manhã',
@@ -261,8 +261,21 @@ export default function StudentPanel({ studentId, token, onClose, onUpdate }: {
                     {isEditing ? <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }} /> : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4 }}>{student.name}</div>}
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Matrícula</label>
-                    {isEditing ? <input value={editForm.enrollment} onChange={e => setEditForm({...editForm, enrollment: e.target.value})} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }} /> : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-mono)' }}>{student.enrollment}</div>}
+                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>ID de Acesso</label>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        background: 'var(--color-primary-50)', color: 'var(--color-primary-700)',
+                        padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-primary-200)',
+                        fontSize: 12, letterSpacing: '0.02em',
+                      }}>{student.accessId}</span>
+                      <span title="Gerado automaticamente — não editável" style={{ display: 'flex', alignItems: 'center' }}>
+                        <Lock size={12} style={{ color: 'var(--color-text-muted)' }} />
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Matrícula Administrativa</label>
+                    {isEditing ? <input value={editForm.enrollment} onChange={e => setEditForm({...editForm, enrollment: e.target.value})} placeholder="Ex: 2026001" style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }} /> : <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-mono)' }}>{student.enrollment || '—'}</div>}
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Série / Turma / Turno</label>

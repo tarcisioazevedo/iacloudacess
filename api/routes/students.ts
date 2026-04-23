@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
+import crypto from 'crypto';
 import { prisma } from '../prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { studentTenantWhere } from '../middleware/tenant';
@@ -8,6 +9,11 @@ import { uploadFile, BUCKETS } from '../services/storageService';
 import { validateAndOptimizePhoto } from '../services/photoValidator';
 import { logger } from '../lib/logger';
 import { auditMiddleware } from '../middleware/auditLogger';
+
+/** Generate a unique accessId for device synchronization */
+function generateAccessId(): string {
+  return 'acc_' + crypto.randomBytes(4).toString('hex');
+}
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -87,8 +93,7 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), 
 
     // ── Input validation ──────────────────────────────────────────
     const errors: string[] = [];
-    if (!name       || typeof name       !== 'string' || !name.trim())       errors.push('name (nome) é obrigatório');
-    if (!enrollment || typeof enrollment !== 'string' || !enrollment.trim()) errors.push('enrollment (matrícula) é obrigatório');
+    if (!name || typeof name !== 'string' || !name.trim()) errors.push('name (nome) é obrigatório');
     if (errors.length) return res.status(400).json({ message: 'Dados inválidos', errors });
 
     const targetSchoolId = schoolId || req.user?.schoolId;
@@ -110,19 +115,26 @@ router.post('/', requireRole('school_admin', 'integrator_admin', 'superadmin'), 
       if (!school) return res.status(403).json({ message: 'Sem permissão para criar alunos nesta escola' });
     }
 
-    // ── Duplicate enrollment check ────────────────────────────────
-    const duplicate = await prisma.student.findFirst({
-      where: { schoolId: targetSchoolId, enrollment: enrollment.trim() },
-      select: { id: true },
-    });
-    if (duplicate) {
-      return res.status(409).json({ message: `Matrícula '${enrollment.trim()}' já existe nesta escola` });
+    // ── Duplicate enrollment check (only if enrollment provided) ──
+    const enrollmentValue = enrollment?.trim() || null;
+    if (enrollmentValue) {
+      const duplicate = await prisma.student.findFirst({
+        where: { schoolId: targetSchoolId, enrollment: enrollmentValue },
+        select: { id: true },
+      });
+      if (duplicate) {
+        return res.status(409).json({ message: `Matrícula '${enrollmentValue}' já existe nesta escola` });
+      }
     }
+
+    // ── Generate unique accessId for device sync ──────────────────
+    const accessId = generateAccessId();
 
     const student = await prisma.student.create({
       data: {
         name: name.trim(),
-        enrollment: enrollment.trim(),
+        accessId,
+        enrollment: enrollmentValue,
         grade: grade?.trim() || null,
         classGroup: classGroup?.trim() || null,
         shift: shift?.trim() || null,
@@ -151,9 +163,10 @@ router.put('/:id', requireRole('school_admin', 'integrator_admin', 'superadmin')
     });
     if (!existing) return res.status(404).json({ message: 'Aluno não encontrado ou sem permissão' });
 
+    // accessId is NEVER editable — it's the device-level identifier
     const student = await prisma.student.update({
       where: { id: req.params.id },
-      data: { name, enrollment, grade, classGroup, shift, status },
+      data: { name, enrollment: enrollment || undefined, grade, classGroup, shift, status },
     });
     return res.json({ student });
   } catch (err: any) {
@@ -349,21 +362,32 @@ router.post('/import-csv',
             where: { schoolId, enrollment },
           });
 
-          const data = {
-            name,
-            enrollment,
-            grade: gradeValue,
-            classGroup: classGroupValue,
-            shift: shiftValue.toLowerCase(),
-            schoolId,
-            status: 'active' as const,
-          };
-
           if (existing) {
-            await prisma.student.update({ where: { id: existing.id }, data: { ...data, schoolId: undefined } });
+            await prisma.student.update({
+              where: { id: existing.id },
+              data: {
+                name,
+                enrollment,
+                grade: gradeValue,
+                classGroup: classGroupValue,
+                shift: shiftValue.toLowerCase(),
+                status: 'active',
+              },
+            });
             results.updated++;
           } else {
-            await prisma.student.create({ data });
+            await prisma.student.create({
+              data: {
+                name,
+                accessId: generateAccessId(),
+                enrollment,
+                grade: gradeValue,
+                classGroup: classGroupValue,
+                shift: shiftValue.toLowerCase(),
+                schoolId,
+                status: 'active',
+              },
+            });
             results.created++;
           }
         } catch (err: any) {

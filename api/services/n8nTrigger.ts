@@ -16,7 +16,7 @@ export async function triggerNotification(event: any) {
   const student = await prisma.student.findUnique({
     where: { id: event.studentId },
     include: {
-      school: { select: { id: true, integratorId: true, name: true, allowPhotoNotifications: true } },
+      school: { select: { id: true, integratorId: true, name: true, allowPhotoNotifications: true, whatsappTemplate: true } },
       guardianLinks: {
         include: { guardian: true },
         where: {
@@ -83,7 +83,9 @@ export async function triggerNotification(event: any) {
     direction: event.direction,
     occurredAt: event.occurredAt,
     photoUrl: event.photoPath || null,
+    base64Photo: event.base64Photo || null,
     allowPhotoConfig: student.school.allowPhotoNotifications,
+    whatsappTemplate: student.school.whatsappTemplate || null,
     guardians: activeGuardians.map(link => ({
       name: link.guardian.name,
       phone: link.guardian.phone,

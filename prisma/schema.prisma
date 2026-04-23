@@ -133,6 +133,7 @@ model School {
   billingUpdatedAt        DateTime?  @map("billing_updated_at")
   billingUpdatedBy        String?    @map("billing_updated_by") // profileId of integrator admin who changed it
   allowPhotoNotifications Boolean    @default(false) @map("allow_photo_notifications")
+  whatsappTemplate        String?    @map("whatsapp_template") // Customizable WhatsApp message template
   createdAt               DateTime   @default(now()) @map("created_at")
 
   units               SchoolUnit[]
@@ -263,10 +264,11 @@ model Student {
   schoolId   String   @map("school_id")
   school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   name       String
-  enrollment String // matrícula
-  grade      String? // série
+  accessId   String   @unique @map("access_id") // ID automático para sincronização com dispositivos faciais
+  enrollment String?  // matrícula administrativa (escolar/empresa) — opcional
+  grade      String?  // série
   classGroup String?  @map("class_group") // turma "8A"
-  shift      String? // manhã, tarde, integral
+  shift      String?  // manhã, tarde, integral
   status     String   @default("active")
   createdAt  DateTime @default(now()) @map("created_at")
 

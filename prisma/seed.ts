@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { hashSecret } from '../api/services/edgeSecurity';
 
 const prisma = new PrismaClient();
@@ -121,7 +122,7 @@ async function main() {
   const students = [];
   for (const s of studentsData) {
     const student = await prisma.student.create({
-      data: { ...s, schoolId: school.id },
+      data: { ...s, schoolId: school.id, accessId: crypto.randomInt(10000000, 99999999).toString() },
     });
     students.push(student);
 

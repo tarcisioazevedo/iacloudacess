@@ -739,7 +739,7 @@ async function resolveEventPhotoPath(
   files: MultipartFilePart[],
   photoCache: Map<string, string | null>,
   requestId?: string | null,
-): Promise<string | null> {
+): Promise<{ photoPath: string | null; base64Data: string | null }> {
   const cacheKey = [
     event.eventIndex ?? '',
     event.filePath || '',
@@ -749,7 +749,7 @@ async function resolveEventPhotoPath(
   ].join('|');
 
   if (photoCache.has(cacheKey)) {
-    return photoCache.get(cacheKey) || null;
+    return { photoPath: photoCache.get(cacheKey) || null, base64Data: null };
   }
 
   let candidate: { buffer: Buffer; contentType: string } | null = decodeBase64Image(event.imageEncode);
@@ -773,7 +773,7 @@ async function resolveEventPhotoPath(
 
   if (!candidate) {
     photoCache.set(cacheKey, null);
-    return null;
+    return { photoPath: null, base64Data: null };
   }
 
   try {
@@ -787,7 +787,7 @@ async function resolveEventPhotoPath(
       candidate.contentType,
     );
     photoCache.set(cacheKey, storagePath);
-    return storagePath;
+    return { photoPath: storagePath, base64Data: candidate.buffer.toString('base64') };
   } catch (err: any) {
     await writeIntelbrasOpsLog(device, {
       level: 'warn',
@@ -806,7 +806,7 @@ async function resolveEventPhotoPath(
       error: err.message,
     });
     photoCache.set(cacheKey, null);
-    return null;
+    return { photoPath: null, base64Data: candidate?.buffer?.toString('base64') || null };
   }
 }
 
@@ -933,7 +933,7 @@ export async function ingestIntelbrasWebhook(params: {
     }
 
     try {
-      const photoPath = await resolveEventPhotoPath(
+      const { photoPath, base64Data } = await resolveEventPhotoPath(
         device,
         normalized,
         params.parsed.files,
@@ -987,7 +987,9 @@ export async function ingestIntelbrasWebhook(params: {
       }
 
       if (normalized.shouldNotify && result.event.studentId) {
-        void triggerNotification(result.event).catch((err) => {
+        // Pass the base64Data to triggerNotification
+        const eventWithBase64 = { ...result.event, base64Photo: base64Data };
+        void triggerNotification(eventWithBase64).catch((err) => {
           void writeIntelbrasOpsLog(device, {
             level: 'warn',
             category: 'notification',

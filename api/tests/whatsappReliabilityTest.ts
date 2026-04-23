@@ -174,6 +174,7 @@ async function setupTestData(): Promise<TestContext> {
     data: {
       schoolId: school.id,
       name: 'Aluno Teste Confiabilidade',
+      accessId: crypto.randomInt(10000000, 99999999).toString(),
       enrollment: testEnrollment,
       grade: '9ª série',
       classGroup: '9A',

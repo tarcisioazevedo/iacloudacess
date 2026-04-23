@@ -128,6 +128,8 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
   const [working, setWorking] = useState(false);
   const [data, setData] = useState<SchoolMessagingResponse | null>(null);
   const [instanceName, setInstanceName] = useState('');
+  const [whatsappTemplate, setWhatsappTemplate] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('');
   const [debugOutput, setDebugOutput] = useState<any>(null);
@@ -230,6 +232,7 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
         };
         setData(demo);
         setInstanceName(demo.channel?.instanceName || '');
+        setWhatsappTemplate('');
         setLoadingChannel(false);
         return;
       }
@@ -244,6 +247,7 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
         }
         setData(payload);
         setInstanceName(payload.channel?.instanceName || '');
+        setWhatsappTemplate(payload.school?.whatsappTemplate || '');
         if (payload.syncError) {
           toast.warning(payload.syncError);
         }
@@ -393,6 +397,26 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
       toast.error(err.message || 'Falha ao excluir a instancia');
     } finally {
       setWorking(false);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    setSavingTemplate(true);
+    try {
+      const res = await fetch(`/api/schools/${resolvedSchoolId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ whatsappTemplate }),
+      });
+      if (!res.ok) throw new Error('Falha ao salvar template');
+      toast.success('Template salvo com sucesso');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar template');
+    } finally {
+      setSavingTemplate(false);
     }
   };
 
@@ -697,6 +721,27 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
                   </pre>
                 </div>
               )}
+            </section>
+
+            <section className="card" style={{ padding: 18, display: 'grid', gap: 14 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Template de Mensagem</h2>
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                  Personalize a mensagem enviada aos responsáveis. Deixe em branco para usar o padrão.
+                </p>
+                <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 8 }}>
+                  Variáveis disponíveis: <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{guardianName}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{studentName}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{enrollment}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{actionText}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{deviceLocation}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{dateText}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{timeText}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{method}}`}</code>, <code style={{background: 'var(--color-surface-2)', padding: '2px 4px', borderRadius: 4}}>{`{{schoolName}}`}</code>.
+                </div>
+              </div>
+              <textarea
+                value={whatsappTemplate}
+                onChange={e => setWhatsappTemplate(e.target.value)}
+                placeholder="*IA Cloud Access*&#10;&#10;Olá {{guardianName}},&#10;&#10;Registramos que o(a) aluno(a) *{{studentName}}* (Matrícula: {{enrollment}}) {{actionText}} instalação *{{deviceLocation}}* em {{dateText}} às {{timeText}}.&#10;&#10;Método: {{method}}&#10;&#10;Este é um aviso automático."
+                style={{ width: '100%', minHeight: 120, resize: 'vertical', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}
+              />
+              <button className="btn btn-primary" onClick={handleSaveTemplate} disabled={savingTemplate} style={{ justifySelf: 'start' }}>
+                {savingTemplate ? <Loader2 size={14} className="spinning" /> : <Send size={14} />} Salvar Template
+              </button>
             </section>
           </div>
         </>
