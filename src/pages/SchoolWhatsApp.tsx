@@ -143,6 +143,8 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
     return selectedSchoolId;
   }, [lockedToOwnSchool, profile?.schoolId, selectedSchoolId]);
 
+  const urlSchoolId = searchParams.get('schoolId');
+
   useEffect(() => {
     if (lockedToOwnSchool) {
       setSelectedSchoolId(profile?.schoolId || '');
@@ -158,7 +160,7 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
       return;
     }
 
-    const requestedSchoolId = searchParams.get('schoolId') || '';
+    const requestedSchoolId = urlSchoolId || '';
     const loadSchools = async () => {
       setLoadingSchools(true);
       if (isDemo) {
@@ -191,12 +193,14 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
     };
 
     loadSchools();
-  }, [isDemo, lockedToOwnSchool, profile?.schoolId, searchParams, token, toast, hubSchoolId]);
+  }, [isDemo, lockedToOwnSchool, profile?.schoolId, urlSchoolId, token, toast, hubSchoolId]);
 
   useEffect(() => {
     if (!resolvedSchoolId) return;
     if (!lockedToOwnSchool && !isHubMode) {
-      setSearchParams({ schoolId: resolvedSchoolId });
+      if (urlSchoolId !== resolvedSchoolId) {
+        setSearchParams({ schoolId: resolvedSchoolId }, { replace: true });
+      }
     }
 
     const loadChannel = async () => {
@@ -259,7 +263,7 @@ export default function SchoolWhatsApp({ isHubMode = false, hubSchoolId }: { isH
     };
 
     loadChannel();
-  }, [isDemo, lockedToOwnSchool, resolvedSchoolId, schools, setSearchParams, toast, token]);
+  }, [isDemo, lockedToOwnSchool, resolvedSchoolId, schools, setSearchParams, toast, token, urlSchoolId]);
 
   // ── Auto-poll when waiting for QR scan ──
   const silentRefresh = useCallback(async () => {
