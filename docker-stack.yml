@@ -130,11 +130,11 @@ services:
   # by only ~20 actual Postgres connections instead of 25+, leaving plenty of
   # headroom for evolution-api, n8n, and operational queries.
   pgbouncer:
-    # edoburu/pgbouncer aceita DB_PASSWORD_FILE nativamente
+    # edoburu/pgbouncer não lê DB_PASSWORD_FILE para montar a userlist, precisamos exportar DB_PASSWORD no entrypoint
     image: edoburu/pgbouncer:latest
+    entrypoint: /bin/sh -c "export DB_PASSWORD=$$(cat /run/secrets/db_password) && exec /entrypoint.sh /etc/pgbouncer/pgbouncer.ini"
     environment:
       DB_USER: ${DB_USER:-schooladmin}
-      DB_PASSWORD_FILE: /run/secrets/db_password
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: school_access
