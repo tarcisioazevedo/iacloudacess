@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { schoolTenantWhere } from '../middleware/tenant';
@@ -25,7 +25,9 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     // Get device stats per school
-    const result = await Promise.all(schools.map(async (school) => {
+    // Get device stats per school sequentially to prevent connection pool exhaustion
+    const result = [];
+    for (const school of schools) {
       const deviceStats = await prisma.device.groupBy({
         by: ['status'],
         where: { schoolUnit: { schoolId: school.id } },
@@ -34,7 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
       const totalDevices = deviceStats.reduce((a, d) => a + d._count, 0);
       const devicesOnline = deviceStats.find(d => d.status === 'online')?._count || 0;
 
-      return {
+      result.push({
         id: school.id,
         name: school.name,
         slug: school.slug,
@@ -47,8 +49,8 @@ router.get('/', async (req: Request, res: Response) => {
         devicesOnline,
         allowPhotoNotifications: school.allowPhotoNotifications,
         createdAt: school.createdAt,
-      };
-    }));
+      });
+    }
 
     return res.json({ schools: result });
   } catch (err: any) {
