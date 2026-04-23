@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users, Building2, GraduationCap, Filter, X, Trash2 } from 'lucide-react';
+import { HardDrive, Wifi, WifiOff, RefreshCw, MapPin, Clock, Users, Building2, GraduationCap, Filter, X, Trash2, Activity, Power, Link2, MoreVertical, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 interface EdgeConnectorSummary {
   id: string;
@@ -76,10 +76,21 @@ const CONNECTION_POLICY_OPTIONS: Array<{
 
 export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?: boolean; hubSchoolId?: string | null }) {
   const { token, user, profile } = useAuth() as any;
+
+  // Role-based permission: only integrator/superadmin can operate hardware directly
+  const isDeviceAdmin = ['superadmin', 'integrator_admin', 'integrator_support'].includes(profile?.role);
+  const canReboot = ['superadmin', 'integrator_admin'].includes(profile?.role);
+
   const [devices, setDevices] = useState<DeviceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState<string | null>(null);
+  const [pinging, setPinging] = useState<string | null>(null);
+  const [rebooting, setRebooting] = useState<string | null>(null);
+  const [autoLinking, setAutoLinking] = useState<string | null>(null);
+  const [pingResults, setPingResults] = useState<Record<string, { status: string; latency?: string; deviceInfo?: any }>>({});
+  const [syncStatuses, setSyncStatuses] = useState<Record<string, { pending: number; synced: number; failed: number }>>({});
+  const [actionsOpen, setActionsOpen] = useState<string | null>(null);
 
   // Filters State
   const [filterSchoolId, setFilterSchoolId] = useState<string>('');
@@ -249,6 +260,146 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
     }
   };
 
+  const handlePing = async (deviceId: string) => {
+    setPinging(deviceId);
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/ping`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      setPingResults(prev => ({ ...prev, [deviceId]: data }));
+      if (data.status === 'online') {
+        load(); // refresh to update heartbeat
+      }
+    } catch (err: any) {
+      setPingResults(prev => ({ ...prev, [deviceId]: { status: 'error' } }));
+    }
+    setPinging(null);
+  };
+
+  const handleReboot = async (deviceId: string, deviceName: string) => {
+    if (!window.confirm(`Tem certeza que deseja reiniciar o dispositivo "${deviceName}"?\n\nO equipamento ficará offline por alguns segundos durante o processo.`)) return;
+    setRebooting(deviceId);
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/reboot`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      alert(data.message || 'Reboot enviado com sucesso');
+      load();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao reiniciar dispositivo');
+    }
+    setRebooting(null);
+  };
+
+  const handleAutoLink = async (deviceId: string) => {
+    if (!window.confirm('Vincular automaticamente todos os usuários ativos a este dispositivo?\n\nIsso criará jobs de sincronização para cada usuário não vinculado.')) return;
+    setAutoLinking(deviceId);
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/auto-link`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      alert(data.message || 'Auto-link concluído');
+      load();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao vincular usuários');
+    }
+    setAutoLinking(null);
+  };
+
+  const handleWipe = async (deviceId: string, deviceName: string) => {
+    const confirmInput = window.prompt(`ATENÇÃO: Operação Destrutiva!\n\nVocê está prestes a apagar TODOS os usuários, cartões e faces do dispositivo "${deviceName}".\nIsso limpará 100% da base física.\n\nPara confirmar, digite "CONFIRMAR":`);
+    if (confirmInput !== 'CONFIRMAR') {
+      if (confirmInput !== null) alert('Operação cancelada: confirmação incorreta.');
+      return;
+    }
+    setSyncing(deviceId);
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/wipe`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      alert(data.message || 'Comandos de limpeza (wipe) enviados com sucesso.');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao executar wipe');
+    }
+    setSyncing(null);
+  };
+
+  const handleRestore = async (deviceId: string, deviceName: string) => {
+    const confirmInput = window.prompt(`ATENÇÃO: Restauração Completa!\n\nVocê vai zerar a memória do dispositivo "${deviceName}" e re-enviar todos os alunos ativos da escola para ele.\n\nPara confirmar, digite "CONFIRMAR":`);
+    if (confirmInput !== 'CONFIRMAR') {
+      if (confirmInput !== null) alert('Operação cancelada: confirmação incorreta.');
+      return;
+    }
+    setSyncing(deviceId);
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/restore`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      alert(data.message || 'Restauração em massa iniciada com sucesso.');
+      load();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao executar restauração');
+    }
+    setSyncing(null);
+  };
+
+  const handleSyncTime = async (deviceId: string) => {
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/sync-time`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      alert(data.message || 'Relógio sincronizado com sucesso.');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao sincronizar relógio');
+    }
+  };
+
+  const fetchDiagnostics = async (deviceId: string) => {
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/diagnostics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (response.ok && data.firmwareVersion) {
+        setPingResults(prev => ({ 
+          ...prev, 
+          [deviceId]: { ...prev[deviceId], status: 'online', deviceInfo: data.firmwareVersion } 
+        }));
+      }
+    } catch (err: any) {
+      // ignore silently
+    }
+  };
+
+  const fetchSyncStatus = async (deviceId: string) => {
+    try {
+      const response = await fetch(`/api/device-sync/${deviceId}/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (data.summary) {
+        setSyncStatuses(prev => ({ ...prev, [deviceId]: data.summary }));
+      }
+    } catch {}
+  };
+
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -327,12 +478,14 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
               </span>
             )}
           </button>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            style={{ background: 'var(--color-primary-600)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <HardDrive size={16} /> Novo Dispositivo
-          </button>
+          {isDeviceAdmin && (
+            <button 
+              onClick={() => setShowAddModal(true)}
+              style={{ background: 'var(--color-primary-600)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <HardDrive size={16} /> Novo Dispositivo
+            </button>
+          )}
         </div>
       </div>
 
@@ -581,7 +734,7 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
                   <HardDrive size={13} /> <span style={{ fontFamily: 'var(--font-mono)' }}>{device.ipAddress}:{device.port}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)' }}>
-                  <Users size={13} /> {device._count?.studentLinks || 0} alunos vinculados
+                  <Users size={13} /> {device._count?.studentLinks || 0} usuários vinculados
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)' }}>
                   <Clock size={13} /> {device.lastHeartbeat ? new Date(device.lastHeartbeat).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Sem heartbeat'}
@@ -770,46 +923,184 @@ export default function Devices({ isHubMode = false, hubSchoolId }: { isHubMode?
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 8 }}>
+              {/* ─── Diagnostics & Operations ─── */}
+              <div style={{ marginBottom: 14, padding: '10px 12px', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
+                    Diagnósticos & Operações
+                  </label>
+                  <button onClick={() => fetchDiagnostics(device.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary-600)', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <RefreshCw size={11} /> Atualizar Info
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-primary)' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Firmware:</span> {pingResults[device.id]?.deviceInfo || 'Desconhecido'}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <button onClick={() => handleSyncTime(device.id)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', color: 'var(--color-text-primary)', fontSize: 10, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={10} /> Sincronizar Relógio
+                    </button>
+                  </div>
+                </div>
+
+                {isDeviceAdmin && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                    <button
+                      onClick={() => handleRestore(device.id, device.name)}
+                      disabled={syncing === device.id}
+                      style={{ flex: 1, padding: '6px', background: 'var(--color-primary-50)', color: 'var(--color-primary-700)', border: '1px solid var(--color-primary-200)', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Restore em Massa
+                    </button>
+                    <button
+                      onClick={() => handleWipe(device.id, device.name)}
+                      disabled={syncing === device.id}
+                      style={{ flex: 1, padding: '6px', background: 'rgba(239,68,68,0.05)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Wipe (Zerar)
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Sync Status Mini-Bar ─── */}
+              {syncStatuses[device.id] && (
+                <div style={{ marginBottom: 10, display: 'flex', gap: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <Loader2 size={11} /> {syncStatuses[device.id].pending} pendentes
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--color-success)' }}>
+                    <CheckCircle2 size={11} /> {syncStatuses[device.id].synced} sincronizados
+                  </span>
+                  {syncStatuses[device.id].failed > 0 && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--color-danger)' }}>
+                      <XCircle size={11} /> {syncStatuses[device.id].failed} falhas
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* ─── Ping Result Feedback ─── */}
+              {pingResults[device.id] && (
+                <div style={{
+                  marginBottom: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)', fontSize: 12,
+                  background: pingResults[device.id].status === 'online'
+                    ? 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))'
+                    : 'linear-gradient(135deg, rgba(239,68,68,0.08), rgba(239,68,68,0.02))',
+                  border: `1px solid ${pingResults[device.id].status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  {pingResults[device.id].status === 'online' ? (
+                    <><CheckCircle2 size={14} color="var(--color-success)" /> <span>Conectado — latência {pingResults[device.id].latency || '?'}</span></>
+                  ) : (
+                    <><XCircle size={14} color="var(--color-danger)" /> <span>Falha na conexão</span></>
+                  )}
+                </div>
+              )}
+
+              {/* ─── Premium Action Toolbar ─── */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {isDeviceAdmin && (
                 <button
-                  onClick={() => triggerSync(device.id)}
-                  disabled={syncing === device.id}
+                  onClick={() => handlePing(device.id)}
+                  disabled={pinging === device.id}
+                  title="Testar conectividade"
                   style={{
-                    flex: 1,
-                    padding: '8px 0',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    border: '1.5px solid var(--color-primary-400)',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'transparent',
-                    color: 'var(--color-primary-700)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
+                    padding: '8px 12px', fontSize: 11, fontWeight: 600,
+                    border: '1.5px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary-400)'; e.currentTarget.style.color = 'var(--color-primary-700)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
+                >
+                  {pinging === device.id ? <Loader2 size={13} className="spinning" /> : <Activity size={13} />}
+                  Ping
+                </button>
+                )}
+
+                {/* Sync All */}
+                <button
+                  onClick={() => { triggerSync(device.id); fetchSyncStatus(device.id); }}
+                  disabled={syncing === device.id || device.operationStatus?.ok === false}
+                  title="Sincronizar todos os usuários com o dispositivo"
+                  style={{
+                    flex: 1, minWidth: 110, padding: '8px 12px', fontSize: 11, fontWeight: 600,
+                    border: '1.5px solid var(--color-primary-400)', borderRadius: 'var(--radius-sm)',
+                    background: 'transparent', color: 'var(--color-primary-700)',
+                    cursor: device.operationStatus?.ok === false ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    opacity: device.operationStatus?.ok === false ? 0.5 : 1,
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <RefreshCw size={14} className={syncing === device.id ? 'spinning' : ''} />
+                  <RefreshCw size={13} className={syncing === device.id ? 'spinning' : ''} />
                   {syncing === device.id ? 'Sincronizando...' : 'Sincronizar'}
                 </button>
+
+                {/* Auto-Link Users */}
+                <button
+                  onClick={() => handleAutoLink(device.id)}
+                  disabled={autoLinking === device.id || device.operationStatus?.ok === false}
+                  title="Vincular automaticamente todos os usuários ativos"
+                  style={{
+                    padding: '8px 12px', fontSize: 11, fontWeight: 600,
+                    border: '1.5px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
+                    cursor: device.operationStatus?.ok === false ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    opacity: device.operationStatus?.ok === false ? 0.5 : 1,
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={e => { if (device.operationStatus?.ok !== false) { e.currentTarget.style.borderColor = 'var(--color-success)'; e.currentTarget.style.color = 'var(--color-success)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
+                >
+                  {autoLinking === device.id ? <Loader2 size={13} className="spinning" /> : <Link2 size={13} />}
+                  Auto-Link
+                </button>
+
+                {/* Reboot — danger action, role-gated */}
+                {canReboot && (
+                  <button
+                    onClick={() => handleReboot(device.id, device.name)}
+                    disabled={rebooting === device.id}
+                    title="Reiniciar dispositivo remotamente"
+                    style={{
+                      padding: '8px 12px', fontSize: 11, fontWeight: 600,
+                      border: '1.5px solid var(--color-warning)', borderRadius: 'var(--radius-sm)',
+                      background: 'transparent', color: 'var(--color-warning)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.08)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {rebooting === device.id ? <Loader2 size={13} className="spinning" /> : <Power size={13} />}
+                    Reboot
+                  </button>
+                )}
+
+                {/* Delete — only device admins */}
+                {isDeviceAdmin && (
                 <button
                   onClick={() => handleRemoveDevice(device.id, device.name)}
+                  title="Remover dispositivo"
                   style={{
-                    padding: '8px 12px',
-                    border: '1.5px solid var(--color-danger)',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'transparent',
-                    color: 'var(--color-danger)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    padding: '8px 10px',
+                    border: '1.5px solid var(--color-danger)', borderRadius: 'var(--radius-sm)',
+                    background: 'transparent', color: 'var(--color-danger)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.15s ease',
                   }}
-                  title="Remover Dispositivo"
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={13} />
                 </button>
+                )}
               </div>
             </div>
           );

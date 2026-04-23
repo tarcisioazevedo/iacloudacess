@@ -38,7 +38,7 @@ function getDemoSchools(): SchoolItem[] {
 
 export default function Schools() {
   const navigate = useNavigate();
-  const { token, isDemo } = useAuth();
+  const { token, isDemo, profile } = useAuth();
   const [schools, setSchools] = useState<SchoolItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
