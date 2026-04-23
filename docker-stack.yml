@@ -113,8 +113,8 @@ services:
         max_attempts: 10
     healthcheck:
       # Checar apenas se o servidor aceita conexões (não checar DB específico)
-      # Executar o healthcheck como usuário `postgres` (superuser) pela rede local para evitar erros de senha
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-school_access}"]
+      # O DB school_access é criado pelo POSTGRES_DB no primeiro init
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-schooladmin} -d ${POSTGRES_DB:-school_access}"]
       interval: 10s
       timeout: 5s
       retries: 5
