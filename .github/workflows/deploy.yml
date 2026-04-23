@@ -16,12 +16,16 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            set -e
             cd /opt/iacloudacess
             echo "Pulling latest changes from Git..."
             git pull origin main
             
-            echo "Rebuilding required images..."
+            echo "Building API image..."
             docker build -t school-access-api:latest -f Dockerfile .
+            
+            echo "Building Frontend image..."
+            docker build -t school-access-frontend:latest -f Dockerfile.frontend .
             
             echo "Deploying Docker Stack..."
             export $(grep -v '^#' .env | xargs) && docker stack deploy -c docker-stack.yml school --with-registry-auth
