@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+﻿import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Search, GraduationCap, X, Upload, FileSpreadsheet, Camera, CheckCircle, AlertTriangle, Download, ChevronRight } from 'lucide-react';
 import StudentPanel from '../components/students/StudentPanel';

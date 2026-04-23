@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+﻿import { Worker } from 'bullmq';
 import { prisma } from '../prisma';
 import { getDeviceClient } from '../services/deviceClientFactory';
 import { deviceSyncConnection, deviceSyncQueue } from '../services/deviceSyncQueue';
