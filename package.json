@@ -19,6 +19,8 @@
     "edge:simulate-event": "tsx edge-agent/main.ts simulate-event",
     "edge:doctor": "tsx edge-agent/main.ts doctor",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:whatsapp": "tsx api/tests/whatsappReliabilityTest.ts",
     "test:whatsapp:live": "DRY_RUN=false tsx api/tests/whatsappReliabilityTest.ts",
     "compose:dev": "docker compose -f docker-stack.yml -f docker-compose.dev.yml up -d --build",
@@ -33,6 +35,8 @@
     "swarm:logs": "docker service logs school_api -f --tail 100"
   },
   "dependencies": {
+    "@bull-board/api": "^7.0.0",
+    "@bull-board/express": "^7.0.0",
     "@prisma/client": "^6.9.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.7.0",
@@ -81,6 +85,7 @@
     "tailwindcss": "^4.1.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.0",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.1.5"
   }
 }

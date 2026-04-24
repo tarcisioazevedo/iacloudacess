@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { SkeletonTable } from '../components/ui/Skeleton';
@@ -125,6 +125,10 @@ export default function Schools() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadData();
+  }, [isDemo, token]);
 
   const handleTogglePhoto = async (schoolId: string, current: boolean) => {
     try {

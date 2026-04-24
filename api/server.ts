@@ -48,6 +48,9 @@ import platformConfigRoutes from './routes/platformConfig';
 import schoolBillingRoutes from './routes/schoolBilling';
 import schoolMessagingRoutes from './routes/schoolMessaging';
 import { initOpsLogStore } from './services/opsLogService';
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
+import { ExpressAdapter } from '@bull-board/express';
 
 const JWT_SECRET = getJwtSecret();
 const IS_AUTOREG_GATEWAY = process.env.AUTOREG_GATEWAY_MODE === 'true';
@@ -322,7 +325,22 @@ app.get('/api/health', async (_req, res) => {
     checks.database = 'error';
   }
 
-  const isHealthy = checks.database === 'ok';
+  try {
+    await redisGlobal.ping();
+    checks.redis = 'ok';
+  } catch {
+    checks.redis = 'error';
+  }
+
+  try {
+    const { minio } = await import('./services/storageService');
+    await minio.listBuckets();
+    checks.storage = 'ok';
+  } catch {
+    checks.storage = 'error';
+  }
+
+  const isHealthy = checks.database === 'ok' && checks.redis === 'ok';
   res.status(isHealthy ? 200 : 503).json({
     status: isHealthy ? 'healthy' : 'degraded',
     version: '0.3.0',
@@ -372,6 +390,25 @@ if (!IS_AUTOREG_GATEWAY) {
   // School billing sub-routes (merged with schools router by path param)
   app.use('/api/schools/:id', apiRateLimiter, schoolBillingRoutes);
   app.use('/api/schools/:id', apiRateLimiter, schoolMessagingRoutes);
+
+  // ── Bull Board: BullMQ queue dashboard (superadmin only) ────────────
+  try {
+    const { notificationQueue } = await import('./services/n8nTrigger');
+    const { deviceSyncQueue } = await import('./services/deviceSyncQueue');
+    const bullBoardAdapter = new ExpressAdapter();
+    bullBoardAdapter.setBasePath('/api/admin/queues');
+    createBullBoard({
+      queues: [
+        new BullMQAdapter(notificationQueue),
+        new BullMQAdapter(deviceSyncQueue),
+      ],
+      serverAdapter: bullBoardAdapter,
+    });
+    app.use('/api/admin/queues', requireAuth, requireRole('superadmin'), bullBoardAdapter.getRouter());
+    logger.info('Bull Board dashboard mounted at /api/admin/queues');
+  } catch (err: any) {
+    logger.warn('Bull Board setup failed', { error: err.message });
+  }
 }
 
 if (!IS_AUTOREG_GATEWAY && !IS_WORKER && HAS_WEB_DIST) {
@@ -420,6 +457,9 @@ io.use((socket, next) => {
   }
 
   if (token === 'demo-token') {
+    if (process.env.NODE_ENV === 'production') {
+      return next(new Error('Demo mode is not available in production'));
+    }
     (socket as any).authType = 'demo';
     return next();
   }
@@ -508,7 +548,7 @@ async function bootstrap() {
     await initStorage();
 
     // Apply lifecycle policy for event photo auto-expiration if configured
-    const retentionDays = parseInt(process.env.STORAGE_HISTORY_RETENTION_DAYS || '0', 10);
+    const retentionDays = parseInt(process.env.STORAGE_HISTORY_RETENTION_DAYS || '90', 10);
     if (retentionDays > 0) {
       const { setLifecyclePolicy, BUCKETS } = await import('./services/storageService');
       await setLifecyclePolicy(BUCKETS.HISTORY, retentionDays);

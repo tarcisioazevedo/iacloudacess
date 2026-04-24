@@ -175,7 +175,7 @@ router.put('/:id', requireRole('school_admin', 'integrator_admin', 'superadmin')
   }
 });
 
-// DELETE /api/students/:id (soft delete)
+// DELETE /api/students/:id (soft delete + LGPD photo cleanup)
 router.delete('/:id', requireRole('school_admin', 'integrator_admin', 'superadmin'), async (req: Request, res: Response) => {
   try {
     // Verify ownership before soft-deleting (tenant isolation)
@@ -185,10 +185,46 @@ router.delete('/:id', requireRole('school_admin', 'integrator_admin', 'superadmi
     });
     if (!existing) return res.status(404).json({ message: 'Aluno não encontrado ou sem permissão' });
 
+    // ── LGPD: Collect storage paths BEFORE soft-deleting ──────────
+    const [studentPhoto, eventPhotos] = await Promise.all([
+      prisma.studentPhoto.findUnique({
+        where: { studentId: req.params.id },
+        select: { storagePath: true },
+      }),
+      prisma.accessEvent.findMany({
+        where: { studentId: req.params.id, photoPath: { not: null } },
+        select: { photoPath: true },
+        distinct: ['photoPath'],
+      }),
+    ]);
+
     await prisma.student.update({
       where: { id: req.params.id },
       data: { status: 'inactive' },
     });
+
+    // ── Fire-and-forget: clean up photos from MinIO ──────────────
+    const { deleteFile } = await import('../services/storageService');
+    const pathsToDelete: string[] = [];
+    if (studentPhoto?.storagePath) pathsToDelete.push(studentPhoto.storagePath);
+    for (const ev of eventPhotos) {
+      if (ev.photoPath) pathsToDelete.push(ev.photoPath);
+    }
+
+    if (pathsToDelete.length > 0) {
+      Promise.allSettled(pathsToDelete.map(p => deleteFile(p)))
+        .then((results) => {
+          const failed = results.filter(r => r.status === 'rejected').length;
+          logger.info('LGPD photo cleanup completed', {
+            studentId: req.params.id,
+            total: pathsToDelete.length,
+            deleted: pathsToDelete.length - failed,
+            failed,
+          });
+        })
+        .catch(() => undefined);
+    }
+
     return res.json({ message: 'Aluno desativado' });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
