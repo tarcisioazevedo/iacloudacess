@@ -47,6 +47,8 @@ import profilesRoutes from './routes/profiles';
 import platformConfigRoutes from './routes/platformConfig';
 import schoolBillingRoutes from './routes/schoolBilling';
 import schoolMessagingRoutes from './routes/schoolMessaging';
+import schoolCalendarRoutes from './routes/schoolCalendar';
+import broadcastsRoutes from './routes/broadcasts';
 import { initOpsLogStore } from './services/opsLogService';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
@@ -390,6 +392,8 @@ if (!IS_AUTOREG_GATEWAY) {
   // School billing sub-routes (merged with schools router by path param)
   app.use('/api/schools/:id', apiRateLimiter, schoolBillingRoutes);
   app.use('/api/schools/:id', apiRateLimiter, schoolMessagingRoutes);
+  app.use('/api/schools/:id', apiRateLimiter, schoolCalendarRoutes);
+  app.use('/api/schools/:id', apiRateLimiter, broadcastsRoutes);
 
   // ── Bull Board: BullMQ queue dashboard (superadmin only) ────────────
   try {
@@ -401,6 +405,7 @@ if (!IS_AUTOREG_GATEWAY) {
       queues: [
         new BullMQAdapter(notificationQueue),
         new BullMQAdapter(deviceSyncQueue),
+        new BullMQAdapter((await import('./workers/broadcastWorker')).broadcastQueue),
       ],
       serverAdapter: bullBoardAdapter,
     });

@@ -134,6 +134,12 @@ model School {
   billingUpdatedBy        String?    @map("billing_updated_by") // profileId of integrator admin who changed it
   allowPhotoNotifications Boolean    @default(false) @map("allow_photo_notifications")
   whatsappTemplate        String?    @map("whatsapp_template") // Customizable WhatsApp message template
+  // ── Absence alert config (per-school) ───────
+  absenceAlertEnabled     Boolean    @default(false) @map("absence_alert_enabled")
+  absenceAlertCutoffTime  String     @default("08:30") @map("absence_alert_cutoff_time") // HH:MM no timezone da escola
+  absenceAlertDays        String[]   @default(["mon","tue","wed","thu","fri"]) @map("absence_alert_days")
+  absenceAlertTemplate    String?    @map("absence_alert_template") @db.Text // {{guardianName}}, {{studentName}}, {{schoolName}}, {{dateText}}, {{cutoffTime}}, {{classGroup}}
+  absenceReportEmail      String?    @map("absence_report_email") // email para receber relatório diário de faltas
   createdAt               DateTime   @default(now()) @map("created_at")
 
   units               SchoolUnit[]
@@ -148,6 +154,8 @@ model School {
   aiConfigs           AIConfig[]
   billingEvents       SchoolBillingEvent[]
   messagingChannels   SchoolMessagingChannel[]
+  calendarEvents      SchoolCalendarEvent[]
+  broadcasts          SchoolBroadcast[]
 
   @@unique([integratorId, slug])
   @@map("schools")
@@ -759,4 +767,65 @@ model AuditLog {
 
   @@index([integratorId, createdAt])
   @@map("audit_logs")
+}
+
+// ─── SCHOOL CALENDAR ──────────────────────────
+
+model SchoolCalendarEvent {
+  id        String    @id @default(uuid())
+  schoolId  String    @map("school_id")
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title     String
+  eventDate DateTime  @map("event_date") @db.Date
+  endDate   DateTime? @map("end_date") @db.Date
+  eventType String    @default("holiday") @map("event_type") // holiday, recess, pedagogical
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([schoolId, eventDate, title])
+  @@index([schoolId, eventDate])
+  @@map("school_calendar_events")
+}
+
+// ─── BROADCASTS (Comunicados Gerais) ──────────
+
+model SchoolBroadcast {
+  id              String    @id @default(uuid())
+  schoolId        String    @map("school_id")
+  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title           String
+  message         String    @db.Text
+  channel         String    @default("whatsapp") // whatsapp, email, all
+  targetScope     String    @default("all") @map("target_scope") // all, grade, classGroup, shift, custom
+  targetFilter    Json?     @map("target_filter") // { grades: [], classGroups: [], shifts: [] }
+  status          String    @default("draft") // draft, scheduled, sending, sent, partial, failed
+  scheduledAt     DateTime? @map("scheduled_at")
+  sentAt          DateTime? @map("sent_at")
+  completedAt     DateTime? @map("completed_at")
+  totalRecipients Int       @default(0) @map("total_recipients")
+  sentCount       Int       @default(0) @map("sent_count")
+  failedCount     Int       @default(0) @map("failed_count")
+  createdById     String?   @map("created_by_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  deliveries BroadcastDelivery[]
+
+  @@index([schoolId, status])
+  @@index([status, scheduledAt])
+  @@map("school_broadcasts")
+}
+
+model BroadcastDelivery {
+  id          String          @id @default(uuid())
+  broadcastId String          @map("broadcast_id")
+  broadcast   SchoolBroadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  guardianId  String          @map("guardian_id")
+  channel     String // whatsapp, email
+  recipient   String // phone or email
+  status      String          @default("pending") // pending, sent, failed
+  sentAt      DateTime?       @map("sent_at")
+  lastError   String?         @map("last_error")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([broadcastId, status])
+  @@map("broadcast_deliveries")
 }

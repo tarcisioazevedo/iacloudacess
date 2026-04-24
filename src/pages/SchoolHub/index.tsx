@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { GraduationCap, BookOpen, HardDrive, ShieldCheck, MessageSquare, Building } from 'lucide-react';
+import { GraduationCap, BookOpen, HardDrive, ShieldCheck, MessageSquare, Building, AlertTriangle, Megaphone } from 'lucide-react';
 
 // Import existing pages to use as Tabs
 import Students from '../Students';
@@ -11,6 +11,8 @@ import SchoolWhatsApp from '../SchoolWhatsApp';
 // Import new Tabs
 import ClassesTab from '../../components/hub/ClassesTab';
 import StaffTab from '../../components/hub/StaffTab';
+import AbsenceConfigTab from '../../components/hub/AbsenceConfigTab';
+import BroadcastsTab from '../../components/hub/BroadcastsTab';
 
 export default function SchoolHub() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,6 +76,8 @@ export default function SchoolHub() {
   if (isSchoolAdminOrIntegrator) {
     TABS.push({ id: 'staff', label: 'Equipe Escolar', icon: <ShieldCheck size={16} /> });
     TABS.push({ id: 'whatsapp', label: 'WhatsApp Escolar', icon: <MessageSquare size={16} /> });
+    TABS.push({ id: 'absence', label: 'Avisos de Falta', icon: <AlertTriangle size={16} /> });
+    TABS.push({ id: 'broadcasts', label: 'Comunicados', icon: <Megaphone size={16} /> });
   }
 
   // Ensure active tab is valid for role
@@ -153,6 +157,8 @@ export default function SchoolHub() {
             {activeTab === 'devices' && <Devices isHubMode={true} hubSchoolId={hubSchoolId} />}
             {activeTab === 'staff' && <StaffTab hubSchoolId={hubSchoolId} />}
             {activeTab === 'whatsapp' && <SchoolWhatsApp isHubMode={true} hubSchoolId={hubSchoolId} />}
+            {activeTab === 'absence' && <AbsenceConfigTab hubSchoolId={hubSchoolId} />}
+            {activeTab === 'broadcasts' && <BroadcastsTab hubSchoolId={hubSchoolId} />}
           </>
         )}
       </div>

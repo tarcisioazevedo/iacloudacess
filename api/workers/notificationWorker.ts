@@ -12,6 +12,8 @@ export function startNotificationWorker() {
   const worker = new Worker('notifications', async (job: Job) => {
     if (job.name === 'dispatch_notifications') {
       await processDispatchNotifications(job.data);
+    } else if (job.name === 'dispatch_absence_alert') {
+      await processAbsenceAlert(job.data);
     }
   }, {
     connection: redisGlobal,
@@ -161,5 +163,36 @@ async function processDispatchNotifications(payload: any) {
     logger.debug('[Hybrid Orchestrator] Payload successfully relayed to n8n.');
   } catch (n8nError: any) {
     logger.warn(`[Hybrid Orchestrator] n8n unreachable or failed: ${n8nError.message}`);
+  }
+}
+
+/**
+ * Process absence alert notifications — sends customizable WhatsApp message
+ * to guardians of absent students.
+ */
+async function processAbsenceAlert(payload: any) {
+  const { schoolId, schoolName, studentName, enrollment, classGroup, grade, cutoffTime, dateText, template, guardians } = payload;
+
+  const target = await resolveTargetInstance(schoolId);
+
+  for (const guardian of guardians) {
+    if (!guardian.whatsappOn || !guardian.phone) continue;
+
+    const message = template
+      .replace(/\{\{guardianName\}\}/g, guardian.name || '')
+      .replace(/\{\{studentName\}\}/g, studentName || '')
+      .replace(/\{\{enrollment\}\}/g, enrollment || 'N/A')
+      .replace(/\{\{classGroup\}\}/g, classGroup || '')
+      .replace(/\{\{grade\}\}/g, grade || '')
+      .replace(/\{\{schoolName\}\}/g, schoolName || '')
+      .replace(/\{\{cutoffTime\}\}/g, cutoffTime || '')
+      .replace(/\{\{dateText\}\}/g, dateText || '');
+
+    try {
+      await sendEvolutionText(target.instanceName, guardian.phone, message);
+      logger.debug(`[AbsenceAlert] Sent to ${guardian.phone} for ${studentName}`);
+    } catch (err: any) {
+      logger.warn(`[AbsenceAlert] Failed to send to ${guardian.phone}: ${err.message}`);
+    }
   }
 }

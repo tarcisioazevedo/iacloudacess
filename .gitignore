@@ -15,3 +15,9 @@ secrets/*.txt
 # Docker volumes
 pgdata/
 redisdata/
+
+# Temporary / build artifacts
+scratch/
+release-edge-win64/
+release-edge-*/
+*.exe
