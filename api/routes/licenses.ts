@@ -4,7 +4,6 @@ import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireRole('superadmin'));
 
 const VALID_PLANS = ['trial', 'starter', 'professional', 'enterprise', 'custom'] as const;
 
@@ -13,6 +12,68 @@ async function auditLog(integratorId: string, profileId: string | undefined, act
     data: { integratorId, profileId: profileId ?? null, action, entity: 'license', entityId, details: details ?? {}, ipAddress: ip ?? null },
   }).catch(() => { /* non-fatal */ });
 }
+
+// ─── GET /api/my-license — Integrator admin: own license summary ─────────────
+
+router.get('/my-license', requireRole('integrator_admin'), async (req: Request, res: Response) => {
+  try {
+    const integratorId = req.user!.integratorId;
+    if (!integratorId) return res.status(403).json({ message: 'Sem integrador associado' });
+
+    const cfg = await prisma.platformConfig.findUnique({ where: { id: 'singleton' } }).catch(() => null);
+    const graceDays = cfg?.licenseGraceDays ?? 12;
+
+    const lic = await prisma.license.findFirst({
+      where: {
+        integratorId,
+        status: { in: ['active', 'trial', 'expiring', 'grace', 'blocked'] },
+      },
+      include: {
+        integrator: {
+          select: {
+            _count: { select: { schools: { where: { status: 'active' } } } },
+          },
+        },
+      },
+      orderBy: { validTo: 'desc' },
+    });
+
+    if (!lic) return res.json({ license: null });
+
+    const usedDevices = await prisma.device.count({
+      where: { schoolUnit: { school: { integratorId } } },
+    });
+
+    const now = new Date();
+    const daysLeft = lic.validTo
+      ? Math.ceil((lic.validTo.getTime() - now.getTime()) / 86_400_000)
+      : null;
+
+    const graceUntil = lic.graceUntil ?? (lic.validTo ? new Date(lic.validTo.getTime() + graceDays * 86_400_000) : null);
+    const graceActive = lic.status === 'grace' && graceUntil !== null && now < graceUntil;
+
+    return res.json({
+      license: {
+        status:        lic.status,
+        plan:          lic.plan,
+        daysLeft:      daysLeft ?? 0,
+        graceActive,
+        graceUntil:    graceUntil?.toISOString() ?? null,
+        validTo:       lic.validTo?.toISOString() ?? null,
+        isExpiringSoon: daysLeft !== null && daysLeft > 0 && daysLeft <= 30,
+        usedSchools:   lic.integrator._count.schools,
+        maxSchools:    lic.maxSchools,
+        usedDevices,
+        maxDevices:    lic.maxDevices,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// All routes below require superadmin
+router.use(requireRole('superadmin'));
 
 // ─── GET /api/licenses — List all licenses with usage ────────────────────────
 
@@ -251,7 +312,8 @@ router.post('/:id/renew', async (req: Request, res: Response) => {
     const newTo    = new Date(validTo);
     if (newTo <= newFrom) return res.status(422).json({ message: '"validTo" deve ser posterior à data de início' });
 
-    const graceDays = 12;
+    const cfg = await prisma.platformConfig.findUnique({ where: { id: 'singleton' } }).catch(() => null);
+    const graceDays = cfg?.licenseGraceDays ?? 12;
     const graceUntil = new Date(newTo.getTime() + graceDays * 86_400_000);
 
     const renewal = await prisma.$transaction(async (tx) => {

@@ -9,6 +9,7 @@
 
 import { prisma } from '../prisma';
 import { logger } from '../lib/logger';
+import { sendTrialExpiryWarning, sendTrialBlocked } from '../services/emailService';
 
 export async function runTrialLifecycleJob(): Promise<void> {
   logger.info('[TrialLifecycle] Starting');
@@ -78,6 +79,17 @@ export async function runTrialLifecycleJob(): Promise<void> {
           });
         }
       });
+      // Send trial blocked email (non-fatal)
+      const adminProfile = await prisma.profile.findFirst({
+        where: { integratorId: lic.integratorId, role: 'integrator_admin' },
+        select: { email: true, name: true },
+      });
+      if (adminProfile?.email) {
+        sendTrialBlocked(adminProfile.email, {
+          recipientName: adminProfile.name ?? lic.integrator.name,
+          companyName:   lic.integrator.name,
+        }).catch(e => logger.error('[TrialLifecycle] blocked email failed', { licenseId: lic.id, err: e?.message }));
+      }
       blocked++;
       continue;
     }
@@ -100,6 +112,19 @@ export async function runTrialLifecycleJob(): Promise<void> {
           },
         }),
       ]);
+      // Send D-1 warning email (non-fatal)
+      const adminProfile = await prisma.profile.findFirst({
+        where: { integratorId: lic.integratorId, role: 'integrator_admin' },
+        select: { email: true, name: true },
+      });
+      if (adminProfile?.email) {
+        sendTrialExpiryWarning(adminProfile.email, {
+          recipientName: adminProfile.name ?? lic.integrator.name,
+          companyName:   lic.integrator.name,
+          daysLeft,
+          validTo:       new Date(lic.validTo),
+        }).catch(e => logger.error('[TrialLifecycle] D-1 email failed', { licenseId: lic.id, err: e?.message }));
+      }
       warned1d++;
     }
     // ── D-2 warning ───────────────────────────────────────────────────────
@@ -120,6 +145,19 @@ export async function runTrialLifecycleJob(): Promise<void> {
           },
         }),
       ]);
+      // Send D-2 warning email (non-fatal)
+      const adminProfile = await prisma.profile.findFirst({
+        where: { integratorId: lic.integratorId, role: 'integrator_admin' },
+        select: { email: true, name: true },
+      });
+      if (adminProfile?.email) {
+        sendTrialExpiryWarning(adminProfile.email, {
+          recipientName: adminProfile.name ?? lic.integrator.name,
+          companyName:   lic.integrator.name,
+          daysLeft,
+          validTo:       new Date(lic.validTo),
+        }).catch(e => logger.error('[TrialLifecycle] D-2 email failed', { licenseId: lic.id, err: e?.message }));
+      }
       warned2d++;
     }
   }

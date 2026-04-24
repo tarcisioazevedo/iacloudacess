@@ -10,6 +10,29 @@
 
 import { prisma } from '../prisma';
 import { logger } from '../lib/logger';
+import {
+  sendLicenseExpiryWarning,
+  sendLicenseGraceStarted,
+  sendLicenseBlocked,
+} from '../services/emailService';
+
+async function getIntegratorContact(integratorId: string) {
+  const [profile, integrator] = await Promise.all([
+    prisma.profile.findFirst({
+      where: { integratorId, role: 'integrator_admin' },
+      select: { email: true, name: true },
+    }),
+    prisma.integrator.findUnique({
+      where: { id: integratorId },
+      select: { name: true, contactEmail: true, contactName: true },
+    }),
+  ]);
+  return {
+    email: profile?.email ?? integrator?.contactEmail ?? null,
+    name:  profile?.name ?? integrator?.contactName ?? integrator?.name ?? 'Integrador',
+    integratorName: integrator?.name ?? '',
+  };
+}
 
 async function getGraceDays(): Promise<number> {
   try {
@@ -67,6 +90,15 @@ export async function runLicenseLifecycleJob(): Promise<void> {
           },
         }),
       ]);
+      // Send blocked email (non-fatal)
+      const contact = await getIntegratorContact(lic.integratorId);
+      if (contact.email) {
+        sendLicenseBlocked(contact.email, {
+          recipientName:   contact.name,
+          integratorName:  contact.integratorName,
+          plan:            lic.plan,
+        }).catch(e => logger.error('[LicenseLifecycle] blocked email failed', { licenseId: lic.id, err: e?.message }));
+      }
       blocked++;
       continue;
     }
@@ -90,6 +122,16 @@ export async function runLicenseLifecycleJob(): Promise<void> {
           },
         }),
       ]);
+      // Send grace email (non-fatal)
+      const contact = await getIntegratorContact(lic.integratorId);
+      if (contact.email) {
+        sendLicenseGraceStarted(contact.email, {
+          recipientName:   contact.name,
+          integratorName:  contact.integratorName,
+          plan:            lic.plan,
+          graceUntil,
+        }).catch(e => logger.error('[LicenseLifecycle] grace email failed', { licenseId: lic.id, err: e?.message }));
+      }
       graced++;
       continue;
     }
@@ -127,6 +169,17 @@ export async function runLicenseLifecycleJob(): Promise<void> {
             },
           }),
         ]);
+        // Send expiry warning email (non-fatal)
+        const contact = await getIntegratorContact(lic.integratorId);
+        if (contact.email) {
+          sendLicenseExpiryWarning(contact.email, {
+            recipientName:  contact.name,
+            integratorName: contact.integratorName,
+            plan:           lic.plan,
+            daysLeft,
+            validTo,
+          }).catch(e => logger.error('[LicenseLifecycle] expiry warning email failed', { licenseId: lic.id, err: e?.message }));
+        }
         expiring++;
       }
     }

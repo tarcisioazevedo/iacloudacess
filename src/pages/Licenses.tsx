@@ -9,8 +9,10 @@ import {
 
 interface LicenseItem {
   id: string;
+  integratorId: string;
   integratorName: string;
   integratorSlug: string;
+  integratorStatus: string;
   plan: string;
   status: string;
   maxSchools: number;
@@ -19,24 +21,16 @@ interface LicenseItem {
   usedDevices: number;
   validFrom: string;
   validTo: string;
-}
-
-function getDemoLicenses(): LicenseItem[] {
-  return [
-    { id: '1', integratorName: 'TechSeg Soluções', integratorSlug: 'techseg', plan: 'enterprise', status: 'active', maxSchools: 50, usedSchools: 18, maxDevices: 500, usedDevices: 126, validFrom: '2025-01-15', validTo: '2027-06-30' },
-    { id: '2', integratorName: 'SecurEdu', integratorSlug: 'securedu', plan: 'professional', status: 'active', maxSchools: 25, usedSchools: 12, maxDevices: 250, usedDevices: 84, validFrom: '2025-04-20', validTo: '2026-12-31' },
-    { id: '3', integratorName: 'EduSafe', integratorSlug: 'edusafe', plan: 'professional', status: 'active', maxSchools: 25, usedSchools: 9, maxDevices: 250, usedDevices: 62, validFrom: '2025-07-10', validTo: '2026-09-15' },
-    { id: '4', integratorName: 'AccessPro', integratorSlug: 'accesspro', plan: 'starter', status: 'active', maxSchools: 10, usedSchools: 5, maxDevices: 100, usedDevices: 38, validFrom: '2025-10-01', validTo: '2026-06-30' },
-    { id: '5', integratorName: 'ControleMax', integratorSlug: 'controlemax', plan: 'trial', status: 'trial', maxSchools: 5, usedSchools: 3, maxDevices: 50, usedDevices: 32, validFrom: '2026-02-20', validTo: '2026-05-15' },
-    { id: '6', integratorName: 'GuardaEscola', integratorSlug: 'guardaescola', plan: 'trial', status: 'trial', maxSchools: 5, usedSchools: 0, maxDevices: 50, usedDevices: 0, validFrom: '2026-04-01', validTo: '2026-05-30' },
-    { id: '7', integratorName: 'SafeSchool BR', integratorSlug: 'safeschool', plan: 'professional', status: 'suspended', maxSchools: 25, usedSchools: 7, maxDevices: 250, usedDevices: 45, validFrom: '2025-03-01', validTo: '2026-03-01' },
-  ];
+  daysLeft: number | null;
+  expired: boolean;
+  expiringSoon: boolean;
 }
 
 export default function Licenses() {
-  const { token, isDemo } = useAuth();
+  const { token } = useAuth();
   const [licenses, setLicenses] = useState<LicenseItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -44,13 +38,17 @@ export default function Licenses() {
 
   const loadData = async () => {
     setLoading(true);
-    if (isDemo) { setLicenses(getDemoLicenses()); setLoading(false); return; }
+    setError(null);
     try {
       const res = await fetch('/api/licenses', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) { const data = await res.json(); setLicenses(data.licenses || []); }
-      else setLicenses(getDemoLicenses());
-    } catch { setLicenses(getDemoLicenses()); }
-    setLoading(false);
+      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      const data = await res.json();
+      setLicenses(data.licenses || []);
+    } catch (e: any) {
+      setError(e.message ?? 'Erro ao carregar licenças');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filtered = licenses.filter(l => {
@@ -62,23 +60,29 @@ export default function Licenses() {
     return true;
   });
 
-  const daysUntilExpiry = (date: string) => Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
-
-  const expiryBadge = (date: string) => {
-    const days = daysUntilExpiry(date);
-    if (days < 0) return <span className="badge badge-danger">Expirado</span>;
-    if (days <= 30) return <span className="badge badge-warning"><Clock size={10} /> {days}d</span>;
-    if (days <= 90) return <span className="badge badge-info">{days}d</span>;
-    return <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{new Date(date).toLocaleDateString('pt-BR')}</span>;
+  const expiryBadge = (item: LicenseItem) => {
+    const { daysLeft, expired, status } = item;
+    if (status === 'blocked')   return <span className="badge badge-danger"><XCircle size={10} /> Bloqueada</span>;
+    if (status === 'grace')     return <span className="badge badge-danger"><AlertTriangle size={10} /> Carência</span>;
+    if (expired || daysLeft === null || daysLeft <= 0)
+                                return <span className="badge badge-danger"><Clock size={10} /> Expirada</span>;
+    if (daysLeft <= 7)          return <span className="badge badge-danger"><Clock size={10} /> {daysLeft}d</span>;
+    if (daysLeft <= 30)         return <span className="badge badge-warning"><Clock size={10} /> {daysLeft}d</span>;
+    if (daysLeft <= 90)         return <span className="badge badge-info">{daysLeft}d</span>;
+    return <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{new Date(item.validTo).toLocaleDateString('pt-BR')}</span>;
   };
 
   const statusBadge = (s: string) => {
     switch (s) {
-      case 'active': return <span className="badge badge-success"><CheckCircle size={10} /> Ativa</span>;
-      case 'trial': return <span className="badge badge-warning"><AlertTriangle size={10} /> Trial</span>;
+      case 'active':    return <span className="badge badge-success"><CheckCircle size={10} /> Ativa</span>;
+      case 'expiring':  return <span className="badge badge-warning"><AlertTriangle size={10} /> Expirando</span>;
+      case 'trial':     return <span className="badge badge-warning"><AlertTriangle size={10} /> Trial</span>;
+      case 'grace':     return <span className="badge badge-danger"><AlertTriangle size={10} /> Carência</span>;
+      case 'blocked':   return <span className="badge badge-danger"><XCircle size={10} /> Bloqueada</span>;
       case 'suspended': return <span className="badge badge-danger"><XCircle size={10} /> Suspensa</span>;
-      case 'expired': return <span className="badge badge-danger"><Clock size={10} /> Expirada</span>;
-      default: return <span className="badge">{s}</span>;
+      case 'expired':   return <span className="badge badge-danger"><Clock size={10} /> Expirada</span>;
+      case 'cancelled': return <span className="badge" style={{ background: '#f3f4f6', color: '#6b7280' }}>Cancelada</span>;
+      default:          return <span className="badge">{s}</span>;
     }
   };
 
@@ -102,10 +106,10 @@ export default function Licenses() {
   };
 
   const stats = {
-    active: licenses.filter(l => l.status === 'active').length,
-    trial: licenses.filter(l => l.status === 'trial').length,
-    expiring: licenses.filter(l => daysUntilExpiry(l.validTo) > 0 && daysUntilExpiry(l.validTo) <= 30).length,
-    suspended: licenses.filter(l => l.status === 'suspended').length,
+    active:    licenses.filter(l => l.status === 'active').length,
+    trial:     licenses.filter(l => l.status === 'trial').length,
+    expiring:  licenses.filter(l => l.expiringSoon || l.status === 'expiring' || l.status === 'grace').length,
+    blocked:   licenses.filter(l => l.status === 'blocked' || l.status === 'suspended').length,
   };
 
   return (
@@ -128,8 +132,8 @@ export default function Licenses() {
         {[
           { label: 'Ativas', value: stats.active, icon: <CheckCircle size={14} />, color: 'var(--color-success)' },
           { label: 'Trial', value: stats.trial, icon: <AlertTriangle size={14} />, color: 'var(--color-warning)' },
-          { label: 'Expirando (30d)', value: stats.expiring, icon: <Clock size={14} />, color: 'var(--color-info)' },
-          { label: 'Suspensas', value: stats.suspended, icon: <XCircle size={14} />, color: 'var(--color-danger)' },
+          { label: 'Atenção (30d / carência)', value: stats.expiring, icon: <Clock size={14} />, color: 'var(--color-warning)' },
+          { label: 'Bloqueadas / Suspensas', value: stats.blocked, icon: <XCircle size={14} />, color: 'var(--color-danger)' },
         ].map((s, i) => (
           <div key={i} className="card" style={{ padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -152,14 +156,24 @@ export default function Licenses() {
           style={{ padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: 13, background: 'var(--color-surface)', cursor: 'pointer' }}>
           <option value="all">Todos os status</option>
           <option value="active">Ativas</option>
+          <option value="expiring">Expirando</option>
           <option value="trial">Trial</option>
+          <option value="grace">Em carência</option>
+          <option value="blocked">Bloqueadas</option>
           <option value="suspended">Suspensas</option>
+          <option value="expired">Expiradas</option>
         </select>
       </div>
 
       {/* Table */}
-      {loading ? <SkeletonTable rows={5} cols={7} /> : filtered.length === 0 ? (
-        <EmptyState icon="licenses" title="Nenhuma licença" description="Cadastre a primeira licença para começar." />
+      {loading ? <SkeletonTable rows={5} cols={7} /> : error ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--color-danger)' }}>
+          <XCircle size={24} style={{ marginBottom: 8 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>{error}</p>
+          <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 13 }} onClick={loadData}>Tentar novamente</button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="licenses" title="Nenhuma licença encontrada" description="Ajuste os filtros ou cadastre a primeira licença." />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <table className="data-table">
@@ -169,13 +183,13 @@ export default function Licenses() {
                 <th>Plano</th>
                 <th>Escolas</th>
                 <th>Devices</th>
-                <th>Validade</th>
+                <th>Vencimento</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(l => (
-                <tr key={l.id} style={{ cursor: 'pointer' }}>
+                <tr key={l.id} style={{ cursor: 'pointer', opacity: ['blocked', 'suspended', 'expired', 'cancelled'].includes(l.status) ? 0.65 : 1 }}>
                   <td>
                     <div className="td-bold">{l.integratorName}</div>
                     <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>{l.integratorSlug}</div>
@@ -192,7 +206,7 @@ export default function Licenses() {
                   </td>
                   <td>{usageBar(l.usedSchools, l.maxSchools)}</td>
                   <td>{usageBar(l.usedDevices, l.maxDevices)}</td>
-                  <td>{expiryBadge(l.validTo)}</td>
+                  <td>{expiryBadge(l)}</td>
                   <td>{statusBadge(l.status)}</td>
                 </tr>
               ))}

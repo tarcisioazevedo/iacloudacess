@@ -8,6 +8,22 @@
 
 import { prisma } from '../prisma';
 import { logger } from '../lib/logger';
+import { sendSchoolBillingWarning, sendSchoolBillingBlocked } from '../services/emailService';
+
+async function getIntegratorAdminEmail(integratorId: string) {
+  const profile = await prisma.profile.findFirst({
+    where: { integratorId, role: 'integrator_admin' },
+    select: { email: true, name: true },
+  });
+  if (profile?.email) return profile;
+  const integrator = await prisma.integrator.findUnique({
+    where: { id: integratorId },
+    select: { contactEmail: true, contactName: true, name: true },
+  });
+  return integrator?.contactEmail
+    ? { email: integrator.contactEmail, name: integrator.contactName ?? integrator.name }
+    : null;
+}
 
 export async function runSchoolBillingJob(): Promise<void> {
   logger.info('[SchoolBilling] Starting');
@@ -56,6 +72,14 @@ export async function runSchoolBillingJob(): Promise<void> {
           },
         }),
       ]);
+      // Send blocked email (non-fatal)
+      const contact = await getIntegratorAdminEmail(school.integratorId);
+      if (contact?.email) {
+        sendSchoolBillingBlocked(contact.email, {
+          recipientName: contact.name ?? '',
+          schoolName:    school.name,
+        }).catch(e => logger.error('[SchoolBilling] blocked email failed', { schoolId: school.id, err: e?.message }));
+      }
       blocked++;
       continue;
     }
@@ -82,6 +106,15 @@ export async function runSchoolBillingJob(): Promise<void> {
           },
         }),
       ]);
+      // Send warning email (non-fatal)
+      const contact = await getIntegratorAdminEmail(school.integratorId);
+      if (contact?.email && school.billingBlockAt) {
+        sendSchoolBillingWarning(contact.email, {
+          recipientName: contact.name ?? '',
+          schoolName:    school.name,
+          blockAt:       school.billingBlockAt,
+        }).catch(e => logger.error('[SchoolBilling] warning email failed', { schoolId: school.id, err: e?.message }));
+      }
       warned++;
     }
   }

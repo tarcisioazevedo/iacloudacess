@@ -5,6 +5,38 @@ import { redisGlobal, isRedisAvailable } from '../lib/redis';
 import { runLicenseLifecycleJob } from './licenseLifecycle';
 import { runTrialLifecycleJob } from './trialLifecycle';
 import { runSchoolBillingJob } from './schoolBillingJob';
+import { runAbsenceAlertJob } from './absenceAlertJob';
+import { startBroadcastWorker } from '../workers/broadcastWorker';
+import { sendJobFailureAlert } from '../services/emailService';
+
+async function getSuperadminEmail(): Promise<string | null> {
+  try {
+    const profile = await prisma.profile.findFirst({
+      where: { role: 'superadmin' },
+      select: { email: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return profile?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function notifyJobFailure(jobName: string, err: unknown) {
+  console.error(`[Scheduler] Job "${jobName}" failed:`, err);
+  try {
+    const to = await getSuperadminEmail();
+    if (to) {
+      await sendJobFailureAlert(to, {
+        jobName,
+        error: err instanceof Error ? err.stack ?? err.message : String(err),
+        timestamp: new Date(),
+      });
+    }
+  } catch {
+    // alert itself failed — log only, never throw
+  }
+}
 
 /**
  * Analytics Aggregation Jobs
@@ -39,6 +71,9 @@ export async function startAnalyticsJobs() {
   worker.on('completed', (job) => console.log(`[Analytics] Job ${job.name} completed`));
   worker.on('failed', (job, err) => console.error(`[Analytics] Job ${job?.name} failed:`, err.message));
 
+  // Start broadcast worker (dedicated queue)
+  startBroadcastWorker();
+
   // Clean expired AI report cache every 30 min (no Redis needed)
   setInterval(() => cleanExpiredAICache().catch(() => {}), 30 * 60_000);
 
@@ -57,16 +92,20 @@ export async function startAnalyticsJobs() {
     name: 'school-billing',
     data: { type: 'school-billing' },
   });
+  await licQueue.upsertJobScheduler('absence-alert-check', { pattern: '*/5 * * * *' }, {
+    name: 'absence-alert',
+    data: { type: 'absence-alert' },
+  });
 
   const licWorker = new Worker('license-lifecycle', async (job) => {
     const { type } = job.data;
-    if (type === 'commercial')     await runLicenseLifecycleJob();
-    else if (type === 'trial')     await runTrialLifecycleJob();
+    if (type === 'commercial')          await runLicenseLifecycleJob();
+    else if (type === 'trial')          await runTrialLifecycleJob();
     else if (type === 'school-billing') await runSchoolBillingJob();
+    else if (type === 'absence-alert')  await runAbsenceAlertJob();
   }, { connection: conn, concurrency: 1 });
 
-  licWorker.on('failed', (job, err) =>
-    console.error(`[LicenseLifecycle] Job ${job?.name} failed:`, err.message));
+  licWorker.on('failed', (job, err) => notifyJobFailure(job?.name ?? 'license-lifecycle', err));
 }
 
 /**

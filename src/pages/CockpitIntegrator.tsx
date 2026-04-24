@@ -4,6 +4,7 @@ import { KPICard } from '../components/cockpit/KPICard';
 import { DonutChart } from '../components/charts/DonutChart';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SkeletonKPIRow, SkeletonTable } from '../components/ui/Skeleton';
+import { LicenseBanner } from '../components/LicenseBanner';
 import {
   School, HardDrive, Activity, Shield, AlertTriangle, Bell, BellOff,
   CheckCircle, XCircle, Clock, Send,
@@ -78,6 +79,7 @@ export default function CockpitIntegrator() {
 
   return (
     <div className="animate-fade-in-up">
+      <LicenseBanner />
       {isMockData && (
         <div style={{
           background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 'var(--radius-md)',
