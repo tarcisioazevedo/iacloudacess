@@ -39,18 +39,20 @@ export default function Integrators() {
   const { token, isDemo } = useAuth();
   const [integrators, setIntegrators] = useState<IntegratorItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) { setIntegrators(getDemoIntegrators()); setLoading(false); return; }
     try {
       const res = await fetch('/api/integrators', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const data = await res.json(); setIntegrators(data.integrators || []); }
-      else setIntegrators(getDemoIntegrators());
-    } catch { setIntegrators(getDemoIntegrators()); }
+      else { setError(`Erro ${res.status} ao carregar integradores`); }
+    } catch { setError('Não foi possível conectar ao servidor'); }
     setLoading(false);
   };
 
@@ -121,7 +123,13 @@ export default function Integrators() {
       </div>
 
       {/* Table */}
-      {loading ? <SkeletonTable rows={5} cols={7} /> : filtered.length === 0 ? (
+      {loading ? <SkeletonTable rows={5} cols={7} /> : error ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--color-danger)' }}>
+          <XCircle size={24} style={{ marginBottom: 8 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>{error}</p>
+          <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 13 }} onClick={loadData}>Tentar novamente</button>
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState icon="building" title="Nenhum integrador" description="Cadastre o primeiro integrador para começar." />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>

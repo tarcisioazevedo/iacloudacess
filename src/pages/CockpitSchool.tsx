@@ -8,7 +8,7 @@ import { Sparkline } from '../components/charts/Sparkline';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SkeletonKPIRow, SkeletonCard } from '../components/ui/Skeleton';
 import {
-  LogIn, Users, BellOff, HardDrive, Clock, UserX, AlertTriangle, TrendingUp,
+  LogIn, Users, BellOff, HardDrive, Clock, UserX, AlertTriangle, TrendingUp, XCircle,
 } from 'lucide-react';
 
 interface SchoolAnalytics {
@@ -88,6 +88,7 @@ export default function CockpitSchool() {
   const [absent, setAbsent] = useState<AbsentStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMockData, setIsMockData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -109,6 +110,7 @@ export default function CockpitSchool() {
   }, [lastEvent]);
 
   const loadData = async () => {
+    setError(null);
     if (isDemo) {
       setData(getDemoData());
       setAbsent(DEMO_ABSENT);
@@ -117,7 +119,6 @@ export default function CockpitSchool() {
       return;
     }
 
-    let usedMock = false;
     try {
       const schoolId = profile?.schoolId || '';
       const [analyticsRes, absentRes] = await Promise.all([
@@ -132,23 +133,19 @@ export default function CockpitSchool() {
       if (analyticsRes.ok) {
         setData(await analyticsRes.json());
       } else {
-        setData(getDemoData());
-        usedMock = true;
+        setError(`Erro ${analyticsRes.status} ao carregar analytics`);
       }
 
       if (absentRes.ok) {
         const absentData = await absentRes.json();
         setAbsent(absentData.absent || []);
       } else {
-        setAbsent(DEMO_ABSENT);
-        usedMock = true;
+        setAbsent([]);
       }
     } catch {
-      setData(getDemoData());
-      setAbsent(DEMO_ABSENT);
-      usedMock = true;
+      setError('Não foi possível conectar ao servidor');
     }
-    setIsMockData(usedMock);
+    setIsMockData(false);
     setLoading(false);
   };
 
@@ -174,6 +171,14 @@ export default function CockpitSchool() {
       </div>
     );
   }
+
+  if (error) return (
+    <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--color-danger)' }}>
+      <XCircle size={24} style={{ marginBottom: 8 }} />
+      <p style={{ margin: 0, fontSize: 14 }}>{error}</p>
+      <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 13 }} onClick={loadData}>Tentar novamente</button>
+    </div>
+  );
 
   if (!data) {
     return <EmptyState icon="analytics" title="Sem dados disponíveis" description="Os dados de analytics serão exibidos quando houver eventos processados." />;

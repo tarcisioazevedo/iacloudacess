@@ -443,15 +443,17 @@ function EmailTemplatesTab({ config, onChange, onSave, saving, saved }: {
 function BlockedDocsTab({ token, isDemo }: { token: string; isDemo: boolean }) {
   const [items, setItems] = useState<BlockedDocItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) { setItems(getDemoBlockedDocs()); setLoading(false); return; }
     try {
       const res = await fetch('/api/admin/platform-config/blocked-documents', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const d = await res.json(); setItems(d.blockedDocuments || d || []); }
-      else setItems(getDemoBlockedDocs());
-    } catch { setItems(getDemoBlockedDocs()); }
+      else { setError(`Erro ${res.status} ao carregar documentos bloqueados`); }
+    } catch { setError('Não foi possível conectar ao servidor'); }
     setLoading(false);
   };
 
@@ -476,6 +478,13 @@ function BlockedDocsTab({ token, isDemo }: { token: string; isDemo: boolean }) {
   };
 
   if (loading) return <SkeletonTable rows={3} cols={6} />;
+
+  if (error) return (
+    <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--color-danger)' }}>
+      <p style={{ margin: '0 0 8px', fontSize: 14 }}>{error}</p>
+      <button className="btn btn-secondary" style={{ fontSize: 13 }} onClick={load}>Tentar novamente</button>
+    </div>
+  );
 
   if (items.length === 0) return (
     <EmptyState icon="shield" title="Nenhum documento bloqueado." description="Não há CPFs ou CNPJs bloqueados no momento." />
@@ -554,8 +563,8 @@ export default function PlatformSettings() {
     try {
       const res = await fetch('/api/admin/platform-config', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const d = await res.json(); setConfig(d); }
-      else setConfig(getDemoConfig());
-    } catch { setConfig(getDemoConfig()); }
+      else { console.error('Erro ao carregar configurações:', res.status); }
+    } catch (e) { console.error('Erro ao carregar configurações:', e); }
     setLoading(false);
   };
 

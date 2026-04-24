@@ -535,17 +535,19 @@ function CreateLicenseModal({ token, integrators, onClose, onCreated }: { token:
 function IntegradoresTab({ token, isDemo }: { token: string; isDemo: boolean }) {
   const [items, setItems] = useState<IntegratorItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<IntegratorItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) { setItems(getDemoIntegrators()); setLoading(false); return; }
     try {
       const res = await fetch('/api/integrators', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const d = await res.json(); setItems(d.integrators || []); }
-      else setItems(getDemoIntegrators());
-    } catch { setItems(getDemoIntegrators()); }
+      else { setError(`Erro ${res.status} ao carregar integradores`); }
+    } catch { setError('Não foi possível conectar ao servidor'); }
     setLoading(false);
   };
 
@@ -573,7 +575,12 @@ function IntegradoresTab({ token, isDemo }: { token: string; isDemo: boolean }) 
         </button>
       </div>
 
-      {loading ? <SkeletonTable rows={4} cols={7} /> : items.length === 0 ? (
+      {loading ? <SkeletonTable rows={4} cols={7} /> : error ? (
+        <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--color-danger)' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 14 }}>{error}</p>
+          <button className="btn btn-secondary" style={{ fontSize: 13 }} onClick={load}>Tentar novamente</button>
+        </div>
+      ) : items.length === 0 ? (
         <EmptyState icon="building" title="Nenhum integrador" description="Cadastre o primeiro integrador para começar." />
       ) : (
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
@@ -637,20 +644,23 @@ function LicencasTab({ token, isDemo }: { token: string; isDemo: boolean }) {
   const [items, setItems] = useState<LicenseItem[]>([]);
   const [integrators, setIntegrators] = useState<IntegratorItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [renewTarget, setRenewTarget] = useState<LicenseItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) { setItems(getDemoLicenses()); setIntegrators(getDemoIntegrators()); setLoading(false); return; }
     try {
       const [lRes, iRes] = await Promise.all([
         fetch('/api/licenses', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/integrators', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      if (lRes.ok) { const d = await lRes.json(); setItems(d.licenses || []); } else setItems(getDemoLicenses());
-      if (iRes.ok) { const d = await iRes.json(); setIntegrators(d.integrators || []); } else setIntegrators(getDemoIntegrators());
-    } catch { setItems(getDemoLicenses()); setIntegrators(getDemoIntegrators()); }
+      if (lRes.ok) { const d = await lRes.json(); setItems(d.licenses || []); }
+      else { setError(`Erro ${lRes.status} ao carregar licenças`); }
+      if (iRes.ok) { const d = await iRes.json(); setIntegrators(d.integrators || []); }
+    } catch { setError('Não foi possível conectar ao servidor'); }
     setLoading(false);
   };
 
@@ -665,7 +675,12 @@ function LicencasTab({ token, isDemo }: { token: string; isDemo: boolean }) {
         </button>
       </div>
 
-      {loading ? <SkeletonTable rows={4} cols={7} /> : items.length === 0 ? (
+      {loading ? <SkeletonTable rows={4} cols={7} /> : error ? (
+        <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--color-danger)' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 14 }}>{error}</p>
+          <button className="btn btn-secondary" style={{ fontSize: 13 }} onClick={load}>Tentar novamente</button>
+        </div>
+      ) : items.length === 0 ? (
         <EmptyState icon="licenses" title="Nenhuma licença" description="Crie a primeira licença para um integrador." />
       ) : (
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
@@ -724,15 +739,17 @@ function LicencasTab({ token, isDemo }: { token: string; isDemo: boolean }) {
 function BlockedDocsTab({ token, isDemo }: { token: string; isDemo: boolean }) {
   const [items, setItems] = useState<BlockedDocItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) { setItems(getDemoBlockedDocs()); setLoading(false); return; }
     try {
       const res = await fetch('/api/admin/platform-config/blocked-documents', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const d = await res.json(); setItems(d.blockedDocuments || d || []); }
-      else setItems(getDemoBlockedDocs());
-    } catch { setItems(getDemoBlockedDocs()); }
+      else { setError(`Erro ${res.status} ao carregar documentos bloqueados`); }
+    } catch { setError('Não foi possível conectar ao servidor'); }
     setLoading(false);
   };
 
@@ -757,6 +774,13 @@ function BlockedDocsTab({ token, isDemo }: { token: string; isDemo: boolean }) {
   };
 
   if (loading) return <SkeletonTable rows={3} cols={6} />;
+
+  if (error) return (
+    <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--color-danger)' }}>
+      <p style={{ margin: '0 0 8px', fontSize: 14 }}>{error}</p>
+      <button className="btn btn-secondary" style={{ fontSize: 13 }} onClick={load}>Tentar novamente</button>
+    </div>
+  );
 
   if (items.length === 0) return (
     <EmptyState icon="shield" title="Nenhum documento bloqueado." description="Não há CPFs ou CNPJs bloqueados no momento." />

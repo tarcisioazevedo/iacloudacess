@@ -41,6 +41,7 @@ export default function Notifications() {
   const { token, isDemo } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<NotifStatus>('all');
   const [search, setSearch] = useState('');
 
@@ -48,6 +49,7 @@ export default function Notifications() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) {
       setNotifications(getDemoNotifications());
       setLoading(false);
@@ -59,10 +61,10 @@ export default function Notifications() {
         const data = await res.json();
         setNotifications(data.notifications || []);
       } else {
-        setNotifications(getDemoNotifications());
+        setError(`Erro ${res.status} ao carregar notificações`);
       }
     } catch {
-      setNotifications(getDemoNotifications());
+      setError('Não foi possível conectar ao servidor');
     }
     setLoading(false);
   };
@@ -146,7 +148,13 @@ export default function Notifications() {
       </div>
 
       {/* Table */}
-      {loading ? <SkeletonTable rows={6} cols={6} /> : filtered.length === 0 ? (
+      {loading ? <SkeletonTable rows={6} cols={6} /> : error ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--color-danger)' }}>
+          <XCircle size={24} style={{ marginBottom: 8 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>{error}</p>
+          <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 13 }} onClick={loadData}>Tentar novamente</button>
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState icon="notifications" title="Nenhuma notificação" description="Não há notificações para exibir com os filtros aplicados." />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>

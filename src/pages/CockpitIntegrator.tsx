@@ -48,16 +48,18 @@ export default function CockpitIntegrator() {
   const [data, setData] = useState<IntegratorAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMockData, setIsMockData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
+    setError(null);
     if (isDemo) { setData(getDemoData()); setIsMockData(true); setLoading(false); return; }
     try {
       const res = await fetch('/api/analytics/integrator/today', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { setData(await res.json()); setIsMockData(false); }
-      else { setData(getDemoData()); setIsMockData(true); }
-    } catch { setData(getDemoData()); setIsMockData(true); }
+      else { setError(`Erro ${res.status} ao carregar analytics`); }
+    } catch { setError('Não foi possível conectar ao servidor'); }
     setLoading(false);
   };
 
@@ -69,6 +71,14 @@ export default function CockpitIntegrator() {
       <div className="skeleton" style={{ width: 350, height: 14, marginBottom: 24 }} />
       <SkeletonKPIRow count={5} />
       <div style={{ marginTop: 16 }}><SkeletonTable rows={6} cols={5} /></div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--color-danger)' }}>
+      <XCircle size={24} style={{ marginBottom: 8 }} />
+      <p style={{ margin: 0, fontSize: 14 }}>{error}</p>
+      <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 13 }} onClick={loadData}>Tentar novamente</button>
     </div>
   );
 

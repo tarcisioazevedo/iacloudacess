@@ -41,6 +41,7 @@ export default function Schools() {
   const { token, isDemo, profile } = useAuth();
   const [schools, setSchools] = useState<SchoolItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
@@ -104,6 +105,7 @@ export default function Schools() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     if (isDemo) {
       setSchools(getDemoSchools());
       setLoading(false);
@@ -114,13 +116,11 @@ export default function Schools() {
       const res = await fetch('/api/schools', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        throw new Error('Nao foi possivel carregar as escolas');
-      }
+      if (!res.ok) throw new Error(`Erro ${res.status} ao carregar escolas`);
       const data = await res.json();
       setSchools(data.schools || []);
-    } catch {
-      setSchools(getDemoSchools());
+    } catch (e: any) {
+      setError(e.message ?? 'Não foi possível carregar as escolas');
     } finally {
       setLoading(false);
     }
@@ -216,7 +216,13 @@ export default function Schools() {
         </select>
       </div>
 
-      {loading ? <SkeletonTable rows={5} cols={7} /> : filtered.length === 0 ? (
+      {loading ? <SkeletonTable rows={5} cols={7} /> : error ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--color-danger)' }}>
+          <XCircle size={24} style={{ marginBottom: 8 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>{error}</p>
+          <button className="btn btn-secondary" style={{ marginTop: 12, fontSize: 13 }} onClick={loadData}>Tentar novamente</button>
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState icon="schools" title="Nenhuma escola encontrada" description="Tente ajustar os filtros ou cadastre uma nova escola." />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
