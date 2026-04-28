@@ -51,7 +51,7 @@ import schoolCalendarRoutes from './routes/schoolCalendar';
 import broadcastsRoutes from './routes/broadcasts';
 import { initOpsLogStore } from './services/opsLogService';
 import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 
 const JWT_SECRET = getJwtSecret();
