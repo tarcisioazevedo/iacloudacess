@@ -817,7 +817,7 @@ async function resolveDeviceContext(tenantKey: string): Promise<DeviceContext | 
   return prisma.device.findFirst({
     where: {
       OR: [
-        { id: normalizedKey },
+        { id: { startsWith: normalizedKey } },
         { localIdentifier: normalizedKey },
         { serialNumber: normalizedKey },
       ],
